@@ -3,6 +3,14 @@
 All notable changes to OpenUnlock. Format follows Keep a Changelog;
 versioning follows SemVer.
 
+## [Unreleased]
+
+### Added
+- Termux support: `termux/install-termux.sh` + `docs/TERMUX.md` —
+  run the full CLI from a phone (wireless debugging or USB OTG),
+  installable with `pkg install python android-tools git`.
+- Android APK in progress (Chaquopy + Shizuku, `android/`).
+
 ## [0.2.0] — 2026-11-24
 
 ### Added

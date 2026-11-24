@@ -79,6 +79,20 @@ pip install -e .
 
 No third-party Python dependencies. Standard library only.
 
+## Termux (run it from a phone)
+
+No PC needed — see [docs/TERMUX.md](docs/TERMUX.md). In Termux:
+
+```bash
+pkg install python android-tools git
+git clone https://github.com/th3v01d2269/openunlock.git ~/openunlock
+cd ~/openunlock && pip install -e . --break-system-packages
+openunlock devices
+```
+
+CLI only in Termux (no GUI — no Tk display). Connect a target phone over
+wireless debugging or USB OTG.
+
 ## Use
 
 ```bash
