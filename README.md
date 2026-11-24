@@ -93,6 +93,17 @@ openunlock devices
 CLI only in Termux (no GUI — no Tk display). Connect a target phone over
 wireless debugging or USB OTG.
 
+## Android app (APK)
+
+A native Kotlin app version is in `android/` — see
+[docs/ANDROID.md](docs/ANDROID.md). Debug APK: `android/app-debug.apk`
+(`com.openunlock`, v0.2.0, minSdk 26). Live features need the Shizuku
+app; offline features (profiles, FRP catalog, IMEI checks, firmware
+inspect) work without it. The APK is a port of the Python logic, not an
+embedded Python runtime — Gradle cannot build in this sandbox, so it is
+built with kotlinc + aapt2 + d8 directly (`android/manual/build-manual.sh`).
+Not yet run on a real phone.
+
 ## Use
 
 ```bash

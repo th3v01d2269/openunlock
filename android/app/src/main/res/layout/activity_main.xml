@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_title"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/status_shizuku"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Shizuku: checking…" />
+
+        <Button
+            android:id="@+id/btn_shizuku_perm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Request Shizuku permission" />
+
+        <Button
+            android:id="@+id/btn_devices"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="This phone (device info)" />
+
+        <Button
+            android:id="@+id/btn_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Device info + brand profile" />
+
+        <Button
+            android:id="@+id/btn_frp_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="FRP status" />
+
+        <Button
+            android:id="@+id/btn_frp_methods"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="FRP method catalog" />
+
+        <Button
+            android:id="@+id/btn_frp_official"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="FRP official recovery path" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/input_frp_method"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="method id, e.g. talkback-settings"
+                android:inputType="text"
+                android:text="talkback-settings" />
+
+            <Button
+                android:id="@+id/btn_frp_run"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Run FRP method" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_imei_read"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="IMEI read (this phone)" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/input_imei"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="15-digit IMEI to check"
+                android:inputType="number" />
+
+            <Button
+                android:id="@+id/btn_imei_verify"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Luhn check" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_profiles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="All device profiles" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/input_profile"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="brand, e.g. xiaomi"
+                android:inputType="text"
+                android:text="samsung" />
+
+            <Button
+                android:id="@+id/btn_profile_show"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Show profile" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_firmware"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Inspect firmware ZIP…" />
+
+        <Button
+            android:id="@+id/btn_clear"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Clear output" />
+
+        <TextView
+            android:id="@+id/output"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="monospace"
+            android:text="OpenUnlock starting…\n"
+            android:textIsSelectable="true" />
+
+    </LinearLayout>
+</ScrollView>

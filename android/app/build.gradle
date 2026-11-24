@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.openunlock'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.openunlock"
+        minSdk 26
+        targetSdk 34
+        versionCode 2
+        versionName "0.2.0"
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    // Shizuku: run shell commands with adb privileges (no root needed).
+    // The user's phone already runs Shizuku; without it the app still
+    // offers every offline feature and says plainly what is missing.
+    // API 12.1.0 on purpose: 13.x removed Shizuku.newProcess entirely,
+    // and this app runs shell commands through it.
+    implementation 'dev.rikka.shizuku:api:12.1.0'
+}

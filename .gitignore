@@ -7,3 +7,10 @@ dist/
 venv/
 *.log
 backups/
+# Android (built artifacts; sources are committed)
+android/app/build/
+android/app-debug.apk
+android/app-debug.apk.idsig
+android/manual/build/
+android/manual/*.keystore
+android/local.properties

@@ -1,0 +1,150 @@
+{
+ "official_path": "Official FRP recovery (try this first):\n  1. Sign in with the Google account that was synced to this phone\n     before the reset. If the password is forgotten, recover it at\n     https://accounts.google.com/signin/recovery from another device.\n  2. If the account cannot be recovered, take the phone plus proof\n     of purchase (receipt, box with matching IMEI) to the\n     manufacturer service centre or the carrier that sold it \u2014\n     Samsung, Google, Xiaomi and others remove FRP with proof.\n  3. Only if both fail and the phone is yours: a partition-level\n     erase of `frp` (see `openunlock frp erase --confirm`) removes\n     the stored lock. It does not recover any data.",
+ "methods": [
+  {
+   "id": "talkback-settings",
+   "name": "TalkBack -> Help & Feedback -> YouTube -> Settings",
+   "description": "Enable TalkBack from the setup wizard, open its Help & Feedback page, follow a link into YouTube, then reach Settings from there and add a new Google account.",
+   "applies_to": "Android 5.0\u20139.0; some Samsung devices on Android 14/15",
+   "status": "mostly-patched",
+   "patched_as_of": "Android 10+ (most vendors); Samsung patched the share-sheet entry points in successive 2024\u20132026 updates",
+   "steps": [
+    {
+     "kind": "shell",
+     "cmd": "settings put secure enabled_accessibility_services com.google.android.marvin.talkback/.TalkBackService",
+     "desc": "Enable the TalkBack accessibility service"
+    },
+    {
+     "kind": "shell",
+     "cmd": "settings put secure accessibility_enabled 1",
+     "desc": "Turn accessibility on"
+    },
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.settings.ACCESSIBILITY_SETTINGS",
+     "desc": "Open Accessibility settings"
+    },
+    {
+     "kind": "manual",
+     "text": "In TalkBack settings, open Help & Feedback, tap a link to open YouTube, then from YouTube open Settings.",
+     "desc": "Follow the Help & Feedback link into YouTube"
+    },
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.settings.SETTINGS",
+     "desc": "Open Settings (works once the TalkBack path has escaped the setup wizard)"
+    },
+    {
+     "kind": "manual",
+     "text": "In Settings go to Accounts > Add account and add a Google account you own, then finish setup.",
+     "desc": "Add a Google account, then complete setup"
+    }
+   ]
+  },
+  {
+   "id": "emergency-dialer",
+   "name": "Emergency dialer -> notification shade -> Settings",
+   "description": "From the verification screen, open the emergency dialer, fill it with a long string, pull down the notification shade and reach Settings from there.",
+   "applies_to": "Android 8.0 and earlier",
+   "status": "patched",
+   "patched_as_of": "Android 9 (2018) \u2014 dialer no longer exposes the shade",
+   "steps": [
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.intent.action.DIAL",
+     "desc": "Open the dialer"
+    },
+    {
+     "kind": "shell",
+     "cmd": "input text '****************************************************'",
+     "desc": "Fill the dialer field with a long string"
+    },
+    {
+     "kind": "manual",
+     "text": "Swipe down from the top to open the notification shade and tap the Settings gear icon.",
+     "desc": "Reach Settings from the notification shade"
+    },
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.settings.SETTINGS",
+     "desc": "Open Settings directly (fallback)"
+    }
+   ]
+  },
+  {
+   "id": "youtube-maps-settings",
+   "name": "Maps / YouTube intent -> share -> Settings",
+   "description": "Launch Google Maps or YouTube by intent from the setup flow, use the share sheet to reach a browser or Settings, and add an account from there.",
+   "applies_to": "Android 10\u201312 (varies by vendor skin)",
+   "status": "mostly-patched",
+   "patched_as_of": "Android 13+ \u2014 share-sheet entry points closed; Samsung closed most of them in One UI 5/6 updates",
+   "steps": [
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.intent.action.VIEW -d 'geo:0,0?q=Portland'",
+     "desc": "Launch Google Maps by intent"
+    },
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.intent.action.VIEW -d 'https://www.youtube.com'",
+     "desc": "Launch YouTube by intent"
+    },
+    {
+     "kind": "manual",
+     "text": "From Maps/YouTube, use Share to open a browser, then navigate to Settings (or open the Galaxy Store).",
+     "desc": "Use the share sheet to escape to a browser/Settings"
+    },
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.settings.SETTINGS",
+     "desc": "Open Settings directly (fallback)"
+    }
+   ]
+  },
+  {
+   "id": "add-account-browser",
+   "name": "Verification screen -> Forgot password -> browser",
+   "description": "On the Google verification screen choose 'Try another way', enter any address, tap 'Forgot password' \u2014 this opens a browser, from which Settings can be reached.",
+   "applies_to": "Android 11\u201312",
+   "status": "patched",
+   "patched_as_of": "Android 13 \u2014 the forgot-password flow no longer opens a general browser",
+   "steps": [
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.intent.action.VIEW -d 'https://accounts.google.com/signin/recovery'",
+     "desc": "Open Google account recovery in the browser"
+    },
+    {
+     "kind": "manual",
+     "text": "If a browser opens, use it to reach Settings (via the browser menu or a downloaded settings shortcut).",
+     "desc": "Escape from the browser to Settings"
+    }
+   ]
+  },
+  {
+   "id": "samsung-setup-wizard",
+   "name": "Samsung setup-wizard share-sheet loophole (Android 15)",
+   "description": "Navigate the Samsung setup wizard in a specific sequence to reach accessibility settings, then use the share sheet to open Galaxy Store / YouTube and add an account.",
+   "applies_to": "Samsung Galaxy A/M-series, Android 15, patches up to early 2026",
+   "status": "partially-working",
+   "patched_as_of": "2026 patches \u2014 S-series with the latest patches need other methods; share-sheet entry points are being closed build by build",
+   "steps": [
+    {
+     "kind": "manual",
+     "text": "In the setup wizard, reach the accessibility settings via the wizard's own accessibility entry point.",
+     "desc": "Reach accessibility settings from the wizard"
+    },
+    {
+     "kind": "shell",
+     "cmd": "am start -a android.settings.ACCESSIBILITY_SETTINGS",
+     "desc": "Open Accessibility settings"
+    },
+    {
+     "kind": "manual",
+     "text": "Use the share sheet from an accessibility help page to open the Galaxy Store or YouTube, then install/open a settings shortcut and add a Google account.",
+     "desc": "Share-sheet escape to Galaxy Store / YouTube"
+    }
+   ]
+  }
+ ]
+}

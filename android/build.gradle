@@ -1,0 +1,13 @@
+// Top-level build file for the OpenUnlock Android app (native Kotlin).
+// NOTE: this project used to embed CPython via Chaquopy, but the Gradle
+// daemon protocol is broken in the build sandbox (proven on an empty
+// project: "Could not receive a message from the daemon"), so Chaquopy
+// cannot build here. The app is now native Kotlin: the Python logic is
+// ported (Profiles, FrpCatalog, Imei, Firmware) and the data files
+// (profiles.json, frp-catalog.json) are generated from the Python
+// sources. On a normal machine this Gradle project builds the APK;
+// in this sandbox use android/manual/build-manual.sh instead.
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '2.0.0' apply false
+}
