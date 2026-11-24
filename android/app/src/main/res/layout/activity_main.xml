@@ -210,5 +210,29 @@
             android:text="OpenUnlock starting…\n"
             android:textIsSelectable="true" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Diagnostics"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/status_diagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:text="Diagnostics: checking…"
+            android:textIsSelectable="true" />
+
+        <Button
+            android:id="@+id/btn_diagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Save diagnostics to file" />
+
     </LinearLayout>
 </ScrollView>

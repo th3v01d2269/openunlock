@@ -1,6 +1,6 @@
 # OpenUnlock — NFC tap-to-run
 
-**Version 0.2.2.** The client phone is the tag. No pre-programmed NFC
+**Version 0.2.3.** The client phone is the tag. No pre-programmed NFC
 tags, nothing to stick on a phone, nothing to write.
 
 > **Not tested on a real phone.** There is no Android device in the

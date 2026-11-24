@@ -7,18 +7,36 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import rikka.shizuku.Shizuku
 import java.io.File
 import java.io.FileOutputStream
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * OpenUnlock on Android (native Kotlin build, v0.2.2).
+ * OpenUnlock on Android (native Kotlin build, v0.2.3).
+ *
+ * v0.2.3 is a diagnostic + hardened release: v0.2.2 installed on the
+ * user's moto g 2025 (Android 15) but would not open at all, with no
+ * visible error. Static review cleared the manifest, all view IDs, the
+ * Shizuku/NFC null-checks and the theme — so the failure is either at
+ * Activity construction (field initializers run BEFORE onCreate, where
+ * nothing could catch them) or inside a startup helper. This build
+ * moves all Shizuku listener setup into onCreate, wraps onCreate and
+ * every startup helper in try/catch, and shows a startup failure on
+ * screen (plus a diagnostics file) instead of silently closing.
  *
  * Live shell work goes through Shizuku (adb privileges, no root). Offline
  * features — profiles, FRP catalog, IMEI checks, firmware inspection —
@@ -59,8 +77,14 @@ import java.io.FileOutputStream
  */
 class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
+    companion object {
+        const val VERSION_NAME = "0.2.3"
+        const val VERSION_CODE = 5
+    }
+
     private lateinit var output: TextView
     private lateinit var statusShizuku: TextView
+    private lateinit var statusDiagnostics: TextView
     private lateinit var inputProfile: EditText
     private lateinit var inputImei: EditText
     private lateinit var inputFrpMethod: EditText
@@ -100,13 +124,25 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         "info" to "Device info + profile"
     )
 
-    private val permissionListener =
-        Shizuku.OnRequestPermissionResultListener { _, _ ->
-            runOnUiThread { updateShizukuStatus() }
-        }
+    // NOTE (v0.2.3): this used to be a field initializer, which runs at
+    // Activity construction — BEFORE onCreate — so a Shizuku class-load
+    // failure there killed launch with no UI and nothing catchable.
+    // It is now created inside onCreateInner, inside a try/catch.
+    private var permissionListener: Shizuku.OnRequestPermissionResultListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            onCreateInner(savedInstanceState)
+        } catch (t: Throwable) {
+            // Last-resort catch: show the crash on screen instead of
+            // silently closing, and save it for the report-back.
+            try { saveStartupError(t) } catch (_: Throwable) { }
+            try { showStartupErrorUI(t) } catch (_: Throwable) { }
+        }
+    }
+
+    private fun onCreateInner(savedInstanceState: Bundle?) {
         setContentView(R.layout.activity_main)
 
         output = findViewById(R.id.output)
@@ -115,10 +151,18 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         inputImei = findViewById(R.id.input_imei)
         inputFrpMethod = findViewById(R.id.input_frp_method)
 
-        output.text = "OpenUnlock 0.2.2 (native Android build)\n"
+        output.text = "OpenUnlock $VERSION_NAME (native Android build)\n"
 
-        Shizuku.addRequestPermissionResultListener(permissionListener)
-        updateShizukuStatus()
+        try {
+            val listener = Shizuku.OnRequestPermissionResultListener { _, _ ->
+                runOnUiThread { updateShizukuStatus() }
+            }
+            permissionListener = listener
+            Shizuku.addRequestPermissionResultListener(listener)
+        } catch (t: Throwable) {
+            safeCall("Shizuku listener setup") { throw t }
+        }
+        safeCall("Shizuku status") { updateShizukuStatus() }
 
         // -- NFC tap-to-run ---------------------------------------------
         statusNfc = findViewById(R.id.status_nfc)
@@ -126,7 +170,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         btnNfcDefault = findViewById(R.id.btn_nfc_default)
         inputPairCode = findViewById(R.id.input_pair_code)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-        updateNfcStatus()
+        safeCall("NFC status") { updateNfcStatus() }
         btnNfcReader.setOnClickListener { toggleNfcReader() }
         btnNfcDefault.setOnClickListener { cycleNfcDefaultAction() }
         findViewById<Button>(R.id.btn_wireless_adb).setOnClickListener {
@@ -137,7 +181,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             runWork("Pair + connect") { pairAndConnect(code) }
         }
         // Deep link that launched the app (Tasker / Termux / am start).
-        handleIntent(intent)
+        safeCall("Deep link") { handleIntent(intent) }
 
         findViewById<Button>(R.id.btn_shizuku_perm).setOnClickListener {
             if (!ShizukuShell.isRunning()) {
@@ -194,12 +238,32 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         findViewById<Button>(R.id.btn_clear).setOnClickListener {
             output.text = ""
         }
+
+        // -- Diagnostics section (v0.2.3) -------------------------------
+        statusDiagnostics = findViewById(R.id.status_diagnostics)
+        findViewById<Button>(R.id.btn_diagnostics).setOnClickListener {
+            runWork("Save diagnostics") {
+                val file = diagnosticsFile()
+                if (file == null) {
+                    "Could not open a diagnostics file on this phone."
+                } else {
+                    try {
+                        file.writeText(diagnosticsText())
+                        "Diagnostics saved to:\n${file.absolutePath}"
+                    } catch (e: Exception) {
+                        "Could not save diagnostics: ${e.message}"
+                    }
+                }
+            }
+        }
+        updateDiagnostics()
     }
 
     override fun onResume() {
         super.onResume()
-        updateShizukuStatus()
-        if (nfcReaderOn) startNfcReaderMode()
+        try { updateShizukuStatus() } catch (_: Throwable) { }
+        try { if (nfcReaderOn) startNfcReaderMode() } catch (_: Throwable) { }
+        try { updateDiagnostics() } catch (_: Throwable) { }
     }
 
     override fun onPause() {
@@ -216,7 +280,9 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     override fun onDestroy() {
         super.onDestroy()
-        Shizuku.removeRequestPermissionResultListener(permissionListener)
+        try {
+            permissionListener?.let { Shizuku.removeRequestPermissionResultListener(it) }
+        } catch (_: Throwable) { }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -240,24 +306,28 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     // -- NFC tap-to-run + wireless ADB ---------------------------------
 
     private fun updateNfcStatus() {
-        val base = when {
-            nfcAdapter == null ->
-                "NFC: NOT AVAILABLE on this phone — tap-to-run needs NFC hardware. " +
-                "Deep links (openunlock://) and the manual buttons still work."
-            !nfcAdapter!!.isEnabled ->
-                "NFC: OFF — turn NFC on in Settings, then tap 'Start NFC reader'."
-            nfcReaderOn ->
-                "NFC reader: ARMED — tap a client phone to this phone. " +
-                "Default action on tap: ${nfcActionLabels[nfcDefaultAction]}. " +
-                "The tap also starts the wireless-ADB flow."
-            else ->
-                "NFC reader: OFF — tap 'Start NFC reader', then tap a client phone. " +
-                "Default action on tap: ${nfcActionLabels[nfcDefaultAction]}."
+        try {
+            val base = when {
+                nfcAdapter == null ->
+                    "NFC: NOT AVAILABLE on this phone — tap-to-run needs NFC hardware. " +
+                    "Deep links (openunlock://) and the manual buttons still work."
+                !nfcAdapter!!.isEnabled ->
+                    "NFC: OFF — turn NFC on in Settings, then tap 'Start NFC reader'."
+                nfcReaderOn ->
+                    "NFC reader: ARMED — tap a client phone to this phone. " +
+                    "Default action on tap: ${nfcActionLabels[nfcDefaultAction]}. " +
+                    "The tap also starts the wireless-ADB flow."
+                else ->
+                    "NFC reader: OFF — tap 'Start NFC reader', then tap a client phone. " +
+                    "Default action on tap: ${nfcActionLabels[nfcDefaultAction]}."
+            }
+            statusNfc.text = base
+            btnNfcReader.text =
+                if (nfcReaderOn) "Stop NFC reader" else "Start NFC reader"
+            btnNfcDefault.text = "NFC default: ${nfcActionLabels[nfcDefaultAction]} (tap to change)"
+        } catch (t: Throwable) {
+            try { statusNfc.text = "NFC: status check failed (${t.message})" } catch (_: Throwable) { }
         }
-        statusNfc.text = base
-        btnNfcReader.text =
-            if (nfcReaderOn) "Stop NFC reader" else "Start NFC reader"
-        btnNfcDefault.text = "NFC default: ${nfcActionLabels[nfcDefaultAction]} (tap to change)"
     }
 
     private fun toggleNfcReader() {
@@ -324,10 +394,14 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     /** Deep link that opened (or re-opened) the app: openunlock://<action>.
      *  A `?code=` query param is passed through for the pair link. */
     private fun handleIntent(intent: Intent) {
-        val uri = intent.data ?: return
-        if (uri.scheme != "openunlock") return
-        val action = uri.host ?: return
-        runDeepLinkAction(action, uri.getQueryParameter("code"))
+        try {
+            val uri = intent.data ?: return
+            if (uri.scheme != "openunlock") return
+            val action = uri.host ?: return
+            runDeepLinkAction(action, uri.getQueryParameter("code"))
+        } catch (t: Throwable) {
+            try { appendOutput("\n[Deep link failed: ${t.javaClass.simpleName}: ${t.message}]\n") } catch (_: Throwable) { }
+        }
     }
 
     /**
@@ -652,15 +726,19 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     // -- helpers ----------------------------------------------------------
 
     private fun updateShizukuStatus() {
-        val text = when {
-            !ShizukuShell.isRunning() ->
-                "Shizuku: NOT RUNNING — live features unavailable. " +
-                "Install Shizuku, start it, pair wireless debugging."
-            !ShizukuShell.hasPermission() ->
-                "Shizuku: running, permission NOT GRANTED — tap 'Request Shizuku permission'."
-            else -> "Shizuku: ready — live shell features available."
+        try {
+            val text = when {
+                !ShizukuShell.isRunning() ->
+                    "Shizuku: NOT RUNNING — live features unavailable. " +
+                    "Install Shizuku, start it, pair wireless debugging."
+                !ShizukuShell.hasPermission() ->
+                    "Shizuku: running, permission NOT GRANTED — tap 'Request Shizuku permission'."
+                else -> "Shizuku: ready — live shell features available."
+            }
+            statusShizuku.text = text
+        } catch (t: Throwable) {
+            try { statusShizuku.text = "Shizuku: status check failed (${t.message})" } catch (_: Throwable) { }
         }
-        statusShizuku.text = text
     }
 
     private fun requireShizuku(): String? {
@@ -679,6 +757,132 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     private fun appendOutput(text: String) {
         output.append(text)
+    }
+
+    /** Run a startup helper; a failure is reported in the output box
+     *  instead of killing launch. */
+    private fun safeCall(label: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            try {
+                appendOutput("\n[Startup warning: $label failed: " +
+                    "${t.javaClass.simpleName}: ${t.message}]\n")
+            } catch (_: Throwable) { }
+        }
+    }
+
+    // -- diagnostics (v0.2.3) -------------------------------------------
+    // v0.2.2 would not open at all on the user's phone, with no visible
+    // error. Everything below exists so a startup failure is SHOWN
+    // instead of silently closing, and saved for the report-back.
+
+    private fun diagnosticsFile(): File? {
+        return try {
+            val dir = getExternalFilesDir(null) ?: filesDir
+            File(dir, "openunlock-diagnostics.txt")
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** One block of diagnostics: version, phone, Shizuku, NFC, and the
+     *  startup error (or "none"). Safe to call from any thread. */
+    private fun diagnosticsText(lastError: Throwable? = null): String {
+        val sb = StringBuilder()
+        sb.appendLine("OpenUnlock $VERSION_NAME (code $VERSION_CODE)")
+        sb.appendLine("Phone: ${Build.MANUFACTURER} ${Build.MODEL} — " +
+            "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+        sb.appendLine("Shizuku: " + try {
+            when {
+                !ShizukuShell.isRunning() -> "NOT RUNNING"
+                !ShizukuShell.hasPermission() -> "running, permission NOT GRANTED"
+                else -> "READY"
+            }
+        } catch (t: Throwable) {
+            "check failed: ${t.javaClass.simpleName}: ${t.message}"
+        })
+        sb.appendLine("NFC: " + try {
+            when {
+                nfcAdapter == null -> "NOT AVAILABLE on this phone"
+                !nfcAdapter!!.isEnabled -> "OFF"
+                nfcReaderOn -> "reader ARMED"
+                else -> "available, reader OFF"
+            }
+        } catch (t: Throwable) {
+            "check failed: ${t.javaClass.simpleName}: ${t.message}"
+        })
+        if (lastError != null) {
+            sb.appendLine("Startup error: ${lastError.javaClass.name}: ${lastError.message}")
+            val sw = StringWriter()
+            lastError.printStackTrace(PrintWriter(sw))
+            sb.appendLine(sw.toString())
+        } else {
+            sb.appendLine("Startup error: none")
+        }
+        return sb.toString()
+    }
+
+    private fun saveStartupError(t: Throwable) {
+        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        val file = diagnosticsFile() ?: return
+        try {
+            file.appendText("=== startup failure $stamp ===\n" + diagnosticsText(t) + "\n")
+        } catch (_: Throwable) { }
+    }
+
+    private fun readLastStartupError(): String {
+        return try {
+            val file = diagnosticsFile() ?: return "none"
+            if (!file.exists()) return "none"
+            val text = file.readText()
+            val idx = text.lastIndexOf("=== startup failure")
+            if (idx < 0) "none (file exists, no failure recorded)"
+            else text.substring(idx).take(2000)
+        } catch (_: Throwable) {
+            "unknown (could not read diagnostics file)"
+        }
+    }
+
+    /** Shown when onCreate itself throws: a plain screen with the crash,
+     *  built with no layout inflation and no Shizuku/NFC calls. */
+    private fun showStartupErrorUI(t: Throwable) {
+        val scroll = ScrollView(this)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
+        val tv = TextView(this).apply {
+            text = "OpenUnlock $VERSION_NAME could not start.\n\n" +
+                "Please send this screen back (screenshot or copy the text) — " +
+                "it says exactly what failed.\n\n" + diagnosticsText(t) +
+                "\nDiagnostics file: ${diagnosticsFile()?.absolutePath ?: "(unavailable)"}\n\n" +
+                "If the app keeps failing, uninstall it fully (Settings → Apps → " +
+                "OpenUnlock → Uninstall) and install the new APK fresh — that " +
+                "clears any stale install conflict."
+            setTextIsSelectable(true)
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 13f
+        }
+        box.addView(tv)
+        val retry = Button(this).apply {
+            text = "Try starting again"
+            setOnClickListener { recreate() }
+        }
+        box.addView(retry)
+        scroll.addView(box)
+        setContentView(scroll)
+    }
+
+    /** Diagnostics section on the main screen. */
+    private fun updateDiagnostics() {
+        try {
+            statusDiagnostics.text =
+                "Diagnostics — v$VERSION_NAME (code $VERSION_CODE)\n" +
+                diagnosticsText().lines().take(5).joinToString("\n") +
+                "\nLast startup error: ${readLastStartupError().take(300)}\n" +
+                "File: ${diagnosticsFile()?.absolutePath ?: "(unavailable)"}"
+        } catch (_: Throwable) { }
     }
 
     private fun runWork(label: String, work: () -> String) {

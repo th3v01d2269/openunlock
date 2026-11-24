@@ -1,6 +1,6 @@
 # OpenUnlock for Android
 
-A real Android app version of OpenUnlock (v0.2.2), built Nov 24, 2026.
+A real Android app version of OpenUnlock (v0.2.3), built Nov 24, 2026.
 **APK: `android/app-debug.apk`** (669 KB, debug-signed, `com.openunlock`).
 
 > **Not tested on a real phone.** There is no Android device in the build
@@ -54,6 +54,41 @@ the wireless-ADB flow, and a setup check that reports exactly what
 is missing), and a new NFC profile for wireless ADB. Full write-up:
 [`tasker/README.md`](../tasker/README.md). Nothing original changed
 — the 18-point feature check passes.
+
+**v0.2.3 — diagnostic + hardened release, also additive.** v0.2.2
+installed on the user's moto g 2025 (Android 15) but would not open
+at all, with no visible error. Static review cleared the manifest,
+all view IDs, the Shizuku/NFC null-checks and the theme, so the
+failure is either at Activity construction (field initializers run
+before `onCreate`, where nothing could catch them) or inside a
+startup helper. Changes: the Shizuku listener is now created inside
+`onCreate` instead of as a field initializer; the whole `onCreate`
+body is wrapped in try/catch and shows a startup failure on screen
+(with the stack trace) instead of silently closing, and saves it to
+`Android/data/com.openunlock/files/openunlock-diagnostics.txt`;
+`updateShizukuStatus()`, `updateNfcStatus()`, `handleIntent()` and
+the listener registration each have their own try/catch; the main
+screen has a Diagnostics section (version, Shizuku, NFC, last startup
+error, diagnostics file path) plus a "Save diagnostics to file"
+button.
+
+## App won't open? (troubleshooting)
+
+1. **Uninstall fully, then install fresh.** Settings → Apps →
+   OpenUnlock → Uninstall. Then install the new APK. This clears
+   any stale-install conflict from the 0.2.0 → 0.2.1 → 0.2.2 update
+   chain (same package, debug-signed) and any corrupted app data.
+2. **Read what the app says.** v0.2.3 shows a startup failure on
+   screen instead of closing: screenshot it (or copy the text) and
+   send it back — it names the exact exception. The same text is in
+   `Android/data/com.openunlock/files/openunlock-diagnostics.txt`
+   (Files app → Internal storage → Android → data → com.openunlock
+   → files). The Diagnostics section at the bottom of the main
+   screen also shows the last startup error, or "none".
+3. **If even v0.2.3 shows nothing** (taps the icon, nothing at all,
+   no screen, no crash dialog), the failure is before the Activity
+   runs at all — most likely a stale install state or a bad install.
+   Do step 1, then check free storage and reinstall.
 
 ## Install
 
@@ -124,8 +159,8 @@ reason above.
 
 ## Verification done here
 
-* `aapt dump badging`: package `com.openunlock`, versionCode 3,
-  versionName 0.2.2, minSdk 26, targetSdk 34, permissions
+* `aapt dump badging`: package `com.openunlock`, versionCode 5,
+  versionName 0.2.3, minSdk 26, targetSdk 34, permissions
   `moe.shizuku.manager.permission.API_V23` + `android.permission.NFC`,
   launchable `com.openunlock.MainActivity`, intent filters for
   `openunlock://` (VIEW + NDEF_DISCOVERED), singleTop.
