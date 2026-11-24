@@ -148,6 +148,60 @@
             android:text="Clear output" />
 
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="NFC tap-to-run — the client phone is the tag"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/status_nfc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="NFC: checking…" />
+
+        <Button
+            android:id="@+id/btn_nfc_reader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Start NFC reader" />
+
+        <Button
+            android:id="@+id/btn_nfc_default"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="NFC default: FRP status (tap to change)" />
+
+        <Button
+            android:id="@+id/btn_wireless_adb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enable wireless ADB (auto)" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/input_pair_code"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="6-digit pairing code from client"
+                android:inputType="number" />
+
+            <Button
+                android:id="@+id/btn_pair"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pair + connect" />
+        </LinearLayout>
+
+        <TextView
             android:id="@+id/output"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

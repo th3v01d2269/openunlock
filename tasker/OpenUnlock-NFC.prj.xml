@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OpenUnlock NFC — Tasker project (fallback path).
+     Primary trigger is the OpenUnlock app itself in NFC reader mode:
+     tap a client phone to the host phone and the app detects it and
+     runs its default action + the wireless-ADB flow. This Tasker
+     project is the FALLBACK for when the app is not open in reader mode.
+     Each profile fires on ANY NFC tag (event code 600, blank tag ID)
+     and opens the matching openunlock:// deep link in the app.
+     Honest limit: a client phone randomizes its tag UID per tap, so an
+     NFC profile can never reliably match one specific client — that is
+     why the app's reader mode is primary and this is fallback only.
+     Task "OU CLI FRP status (Termux)" runs the Python CLI in Termux via
+     the documented com.termux.RUN_COMMAND service intent; it needs the
+     com.termux.permission.RUN_COMMAND permission — test it once, and if
+     Termux ignores it, use the Termux:Tasker plugin action in the UI.
+     Import: Tasker → Menu → Data → Import Project → this file.
+     After import, re-import is needed after any XML change. -->
+<TaskerData sr="" dvi="1" tv="6.2.26">
+  <Profile sr="prof201" ve="2">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <flags>8</flags>
+    <id>201</id>
+    <mid0>301</mid0>
+    <nme>OU NFC - FRP status</nme>
+    <Event sr="con0" ve="2">
+      <code>600</code>
+      <pri>0</pri>
+      <Str sr="arg0" ve="3" />
+    </Event>
+  </Profile>
+  <Task sr="task301">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <id>301</id>
+    <nme>OU NFC FRP status</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_nfc_frp" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://frp'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - FRP status</Str>
+      <Str sr="arg1" ve="3">Tag tapped - opening OpenUnlock (FRP status).</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Profile sr="prof202" ve="2">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <flags>8</flags>
+    <id>202</id>
+    <mid0>302</mid0>
+    <nme>OU NFC - IMEI read</nme>
+    <Event sr="con0" ve="2">
+      <code>600</code>
+      <pri>0</pri>
+      <Str sr="arg0" ve="3" />
+    </Event>
+  </Profile>
+  <Task sr="task302">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <id>302</id>
+    <nme>OU NFC IMEI read</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_nfc_imei" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://imei'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - IMEI read</Str>
+      <Str sr="arg1" ve="3">Tag tapped - opening OpenUnlock (IMEI read).</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Profile sr="prof203" ve="2">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <flags>8</flags>
+    <id>203</id>
+    <mid0>303</mid0>
+    <nme>OU NFC - Firmware inspect</nme>
+    <Event sr="con0" ve="2">
+      <code>600</code>
+      <pri>0</pri>
+      <Str sr="arg0" ve="3" />
+    </Event>
+  </Profile>
+  <Task sr="task303">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <id>303</id>
+    <nme>OU NFC Firmware inspect</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_nfc_firmware" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://firmware'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Firmware inspect</Str>
+      <Str sr="arg1" ve="3">Tag tapped - opening OpenUnlock (firmware ZIP picker).</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Profile sr="prof204" ve="2">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <flags>8</flags>
+    <id>204</id>
+    <mid0>304</mid0>
+    <nme>OU NFC - Profiles</nme>
+    <Event sr="con0" ve="2">
+      <code>600</code>
+      <pri>0</pri>
+      <Str sr="arg0" ve="3" />
+    </Event>
+  </Profile>
+  <Task sr="task304">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <id>304</id>
+    <nme>OU NFC Profiles</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_nfc_profiles" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://profiles'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Profiles</Str>
+      <Str sr="arg1" ve="3">Tag tapped - opening OpenUnlock (all profiles).</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Profile sr="prof205" ve="2">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <flags>8</flags>
+    <id>205</id>
+    <mid0>305</mid0>
+    <nme>OU NFC - Device info</nme>
+    <Event sr="con0" ve="2">
+      <code>600</code>
+      <pri>0</pri>
+      <Str sr="arg0" ve="3" />
+    </Event>
+  </Profile>
+  <Task sr="task305">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <id>305</id>
+    <nme>OU NFC Device info</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_nfc_info" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://info'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Device info</Str>
+      <Str sr="arg1" ve="3">Tag tapped - opening OpenUnlock (device info + profile).</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task306">
+    <cdate>1795546491065</cdate>
+    <edate>1795546491065</edate>
+    <id>306</id>
+    <nme>OU CLI FRP status (Termux)</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_cli_frp_status" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am startservice --user 0 -n com.termux/.app.RunCommandService -a com.termux.RUN_COMMAND --es com.termux.RUN_COMMAND_PATH /data/data/com.termux/files/usr/bin/python --esa com.termux.RUN_COMMAND_ARGUMENTS "-m,openunlock,frp,status" --es com.termux.RUN_COMMAND_WORKDIR /data/data/com.termux/files/home/openunlock --ez com.termux.RUN_COMMAND_BACKGROUND true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock CLI - FRP status</Str>
+      <Str sr="arg1" ve="3">Asked Termux to run: python -m openunlock frp status. Check the Termux session for the result.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+</TaskerData>

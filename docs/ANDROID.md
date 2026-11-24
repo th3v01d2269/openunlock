@@ -1,7 +1,7 @@
 # OpenUnlock for Android
 
-A real Android app version of OpenUnlock (v0.2.0), built Nov 24, 2026.
-**APK: `android/app-debug.apk`** (656 KB, debug-signed, `com.openunlock`).
+A real Android app version of OpenUnlock (v0.2.1), built Nov 24, 2026.
+**APK: `android/app-debug.apk`** (664 KB, debug-signed, `com.openunlock`).
 
 > **Not tested on a real phone.** There is no Android device in the build
 > environment, so the APK is verified structurally only (aapt badging,
@@ -31,6 +31,19 @@ NOT in the app (they need a real `adb`/`fastboot` binary — use the
 desktop CLI or the Termux version): bootloader unlock/relock, flashing,
 partition backup/restore, fastboot FRP erase. The app never fakes a live
 result: when Shizuku is missing it says so on screen.
+
+## NFC tap-to-run (v0.2.1, additive — nothing above changed)
+
+Full write-up: [docs/NFC.md](NFC.md). Short version: the host phone
+is the NFC **reader**; tap a client phone against it and that
+detection triggers the default action (FRP status first, changeable
+with the "NFC default" button) and then the wireless-ADB auto-enable
+flow (USB OTG → `adb tcpip 5555` → `adb connect`, or mDNS wireless
+debugging pairing). Deep links `openunlock://frp|imei|firmware|
+profiles|info` work from Tasker, Termux, or `am start`. A Tasker
+fallback project is in `tasker/OpenUnlock-NFC.prj.xml`. NFC is one
+extra section at the bottom of the same screen — every feature in the
+table above works exactly as before with no NFC interaction at all.
 
 ## Install
 
@@ -101,16 +114,27 @@ reason above.
 
 ## Verification done here
 
-* `aapt dump badging`: package `com.openunlock`, versionCode 2,
-  versionName 0.2.0, minSdk 26, targetSdk 34, permission
-  `moe.shizuku.manager.permission.API_V23`, launchable
-  `com.openunlock.MainActivity`.
+* `aapt dump badging`: package `com.openunlock`, versionCode 3,
+  versionName 0.2.1, minSdk 26, targetSdk 34, permissions
+  `moe.shizuku.manager.permission.API_V23` + `android.permission.NFC`,
+  launchable `com.openunlock.MainActivity`, intent filters for
+  `openunlock://` (VIEW + NDEF_DISCOVERED), singleTop.
 * `apksigner verify --verbose`: v2 + v3 schemes true, 1 signer.
 * `dexdump`: all six app classes present
   (MainActivity, ShizukuShell, Profiles, FrpCatalog, Imei, Firmware)
-  plus Kotlin stdlib and the Shizuku API.
-* APK contents: classes.dex (2.1 MB), assets/profiles.json,
+  plus Kotlin stdlib and the Shizuku API; MainActivity implements
+  `NfcAdapter.ReaderCallback` (`onTagDiscovered`, `wirelessAdbFlow`,
+  `pairAndConnect`, `findAdbBinary` all present), NsdManager refs present.
+* APK contents: classes.dex, assets/profiles.json,
   assets/frp-catalog.json, resources, signed manifest.
+* Original-features check (Nov 24): all six areas verified present
+  and reachable from the main screen — this-phone info, device info +
+  brand profile, FRP status + catalog + run, IMEI read + Luhn check,
+  all device profiles, firmware ZIP inspection. The NFC work is
+  additive only; the only removed lines in the diff are version
+  strings and the class-declaration line.
+* `tasker/OpenUnlock-NFC.prj.xml` parses as valid XML; its action
+  codes (Run Shell 123, Notify 523) match a real Tasker 6.2.26 export.
 * `python3 -m unittest discover` on the desktop CLI still passes
   (59 tests) — the ports were checked against the same logic.
 
