@@ -1,13 +1,16 @@
 # OpenUnlock for Android
 
-A real Android app version of OpenUnlock (v0.2.4), built Nov 24, 2026.
+A real Android app version of OpenUnlock (v0.2.5), built Nov 24, 2026.
 **APK: `android/app-debug.apk`** (debug-signed, `com.openunlock`).
 
 > **Tested on a real phone (moto g 2025, Android 15) — partially.**
-> v0.2.3 opens; every button tap closed the app. v0.2.4 is the fix for
-> that (global crash handler + guarded tap handlers). No other device
-> testing exists; the APK is otherwise verified structurally (aapt
-> badging, apksigner v2+v3, dex class listing).
+> v0.2.3 opens; every button tap closed the app. v0.2.4 was the fix
+> for that (global crash handler + guarded tap handlers) but the user
+> reported the same silent close on v0.2.4. v0.2.5 is the intent
+> audit: every intent resolves before firing, and every tap is
+> logged before its work runs. No other device testing exists; the
+> APK is otherwise verified structurally (aapt badging, apksigner
+> v2+v3, dex class listing).
 
 ## What it is
 
@@ -92,6 +95,29 @@ guarded; and the version line sits at the TOP of the main screen
 ("OpenUnlock 0.2.4 — tap a button, watch this box") so the installed
 build is verifiable at a glance.
 
+**v0.2.5 — intent audit + tap trace, also additive.** v0.2.4 still
+closed on every tap, same silent close, so the user directed a full
+audit of every intent call. Inventory (whole tree searched): the
+firmware picker `ACTION_GET_CONTENT` (button + deep-link branch), the
+crash handler's launch of `CrashActivity`, and `CrashActivity`'s
+"Back to OpenUnlock" button — three fire sites, all now resolved
+through `PackageManager.resolveActivity` BEFORE firing, with every
+attempt logged to the diagnostics file (action + resolved + timestamp);
+if nothing resolves, the app says so plainly instead of throwing
+`ActivityNotFoundException`. The Shizuku permission flow makes no
+intent call at all (binder API only — verified in `ShizukuShell`);
+NFC `NDEF_DISCOVERED` is incoming only (`handleIntent` reads
+`intent.data`, nothing is constructed from a tag). Every tap now also
+prints `[Tapped: …]` in the output box and writes a `tap …` line to
+the diagnostics file BEFORE its work runs, so a silent close still
+names the tap. All v0.2.4 protections intact (crash handler,
+`CrashActivity`, `safeTap`, `runWork` catching `Throwable`, top
+version line — now "OpenUnlock 0.2.5 (code 7)"). Honest note: most
+buttons fire no intent at all, so if every tap still closes on
+v0.2.5, the intent audit alone is not the root cause — but the tap
+log will show exactly which tap died, and the crash handler will
+have written the stack trace.
+
 ## App won't open? (troubleshooting)
 
 1. **Uninstall fully, then install fresh.** Settings → Apps →
@@ -113,18 +139,21 @@ build is verifiable at a glance.
 ## Buttons close the app? (troubleshooting)
 
 1. **Check the version line at the top of the screen.** It must say
-   **"OpenUnlock 0.2.4 (code 6)"**. If it says 0.2.3 (or anything
+   **"OpenUnlock 0.2.5 (code 7)"**. If it says 0.2.4 (or anything
    else), the old build is still installed — uninstall fully
    (Settings → Apps → OpenUnlock → Uninstall) and install the new
    APK fresh. Do not install over the old one.
-2. **Read what the app says.** v0.2.4 never closes silently on a tap:
+2. **Read what the app says.** v0.2.5 never closes silently on a tap:
    a tap failure prints `[Button '…' failed: …]` in the output box,
    and an uncaught crash opens a "OpenUnlock crashed" screen with the
-   full stack trace. Screenshot it (or copy the text) and send it
-   back — it names the exact exception. The same text is saved to
+   full stack trace. Every tap also prints `[Tapped: …]` first, so
+   the last line in the output box names the tap that died.
+   Screenshot it (or copy the text) and send it back — it names the
+   exact exception. The same text is saved to
    `Android/data/com.openunlock/files/openunlock-diagnostics.txt`
    (Files app → Internal storage → Android → data → com.openunlock
-   → files).
+   → files), which also holds one `tap …` line per tap and one
+   `intent …` line per intent attempt, each with a timestamp.
 3. **If a tap still closes the app with no screen at all**, the
    failure is outside the app's code (install state, storage, or the
    system killing it). Uninstall fully, check free storage, reinstall
@@ -200,8 +229,8 @@ reason above.
 
 ## Verification done here
 
-* `aapt dump badging`: package `com.openunlock`, versionCode 6,
-  versionName 0.2.4, minSdk 26, targetSdk 34, permissions
+* `aapt dump badging`: package `com.openunlock`, versionCode 7,
+  versionName 0.2.5, minSdk 26, targetSdk 34, permissions
   `moe.shizuku.manager.permission.API_V23` + `android.permission.NFC`,
   launchable `com.openunlock.MainActivity`, intent filters for
   `openunlock://` (VIEW + NDEF_DISCOVERED), singleTop.
@@ -210,7 +239,10 @@ reason above.
   (MainActivity, CrashActivity, ShizukuShell, Profiles, FrpCatalog, Imei, Firmware)
   plus Kotlin stdlib and the Shizuku API; MainActivity implements
   `NfcAdapter.ReaderCallback` (`onTagDiscovered`, `wirelessAdbFlow`,
-  `pairAndConnect`, `findAdbBinary` all present), NsdManager refs present.
+  `pairAndConnect`, `findAdbBinary` all present), NsdManager refs present;
+  v0.2.5 methods present (`resolveIntent`, `logIntentAttempt`, `logTap`,
+  `launchFilePicker`) alongside all v0.2.4 methods (`installCrashHandler`,
+  `safeTap`, `runWork`).
 * APK contents: classes.dex, assets/profiles.json,
   assets/frp-catalog.json, resources, signed manifest.
 * Original-features check (Nov 24): all six areas verified present

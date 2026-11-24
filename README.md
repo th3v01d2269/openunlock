@@ -97,7 +97,7 @@ wireless debugging or USB OTG.
 
 A native Kotlin app version is in `android/` — see
 [docs/ANDROID.md](docs/ANDROID.md). Debug APK: `android/app-debug.apk`
-(`com.openunlock`, v0.2.4, minSdk 26). Live features need the Shizuku
+(`com.openunlock`, v0.2.5, minSdk 26). Live features need the Shizuku
 app; offline features (profiles, FRP catalog, IMEI checks, firmware
 inspect) work without it. The APK is a port of the Python logic, not an
 embedded Python runtime — Gradle cannot build in this sandbox, so it is
@@ -111,7 +111,9 @@ section. v0.2.4 fixes the tap crash: v0.2.3 opened, but every button tap
 closed the app — a global crash handler (any thread) now shows the crash
 in a CrashActivity instead of vanishing, every tap handler is guarded,
 and the version line sits at the top of the screen. Tested on the user's
-moto g 2025: v0.2.3 opens, v0.2.4 is the fix being tested.
+moto g 2025: v0.2.3 opens, v0.2.4 still closed on every tap, v0.2.5 is
+the intent audit being tested — every intent resolves before firing,
+every tap is logged before its work runs.
 
 ## Use
 

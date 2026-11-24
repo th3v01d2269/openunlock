@@ -1,6 +1,6 @@
 # OpenUnlock — Tasker + Shizuku
 
-**File:** `tasker/OpenUnlock-NFC.prj.xml` (v0.2.4, app versionCode 6).
+**File:** `tasker/OpenUnlock-NFC.prj.xml` (v0.2.5, app versionCode 7).
 Import in Tasker: Menu → Data → Import Project → this file.
 Re-import after any XML change.
 

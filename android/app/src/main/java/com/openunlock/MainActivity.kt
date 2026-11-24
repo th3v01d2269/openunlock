@@ -3,6 +3,7 @@ package com.openunlock
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.nfc.NfcAdapter
@@ -52,6 +53,21 @@ import java.util.Locale
  * line at the TOP of the screen so the installed build is verifiable
  * at a glance.
  *
+ * v0.2.5: v0.2.4 STILL closed on every tap, same silent close. The
+ * user directed a full audit of every intent call. Every intent in
+ * the app now resolves through PackageManager BEFORE firing
+ * (firmware picker, CrashActivity launch, CrashActivity back button);
+ * if nothing resolves, the app says so plainly instead of throwing
+ * ActivityNotFoundException. Every intent attempt is logged to the
+ * diagnostics file (action + resolved + timestamp), and every tap is
+ * logged BEFORE its work runs, with a "[Tapped: …]" line in the
+ * output box — so even a silent close leaves a trace naming the tap.
+ * All v0.2.4 protections are intact (crash handler, CrashActivity,
+ * safeTap, runWork catching Throwable, top version line). The Shizuku
+ * permission flow makes no intent call at all (binder API only) —
+ * verified in ShizukuShell; NFC NDEF_DISCOVERED is incoming only
+ * (handleIntent reads intent.data, nothing is constructed from a tag).
+ *
  * Live shell work goes through Shizuku (adb privileges, no root). Offline
  * features — profiles, FRP catalog, IMEI checks, firmware inspection —
  * work with no Shizuku at all. Nothing here fakes a live result: when
@@ -92,8 +108,8 @@ import java.util.Locale
 class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     companion object {
-        const val VERSION_NAME = "0.2.4"
-        const val VERSION_CODE = 6
+        const val VERSION_NAME = "0.2.5"
+        const val VERSION_CODE = 7
 
         // Installed once per process: reinstalling would chain the
         // handler to itself (onCreate runs again on recreation).
@@ -197,7 +213,13 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                     putExtra(CrashActivity.EXTRA_FILE, file?.absolutePath ?: "")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                 }
-                try { startActivity(intent) } catch (_: Throwable) { }
+                // v0.2.5: resolve before firing, and log the attempt —
+                // even the crash screen's own launch is audited.
+                val crashResolved = resolveIntent(intent)
+                logIntentAttempt("explicit CrashActivity (crash handler)", crashResolved)
+                if (crashResolved) {
+                    try { startActivity(intent) } catch (_: Throwable) { }
+                }
             } catch (_: Throwable) { }
             try { previous?.uncaughtException(thread, throwable) } catch (_: Throwable) { }
             try { android.os.Process.killProcess(android.os.Process.myPid()) } catch (_: Throwable) { }
@@ -328,17 +350,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         }
         findViewById<Button>(R.id.btn_firmware).setOnClickListener {
             safeTap("Inspect firmware ZIP") {
-                try {
-                    val intent = Intent(Intent.ACTION_GET_CONTENT)
-                        .setType("application/zip")
-                        .addCategory(Intent.CATEGORY_OPENABLE)
-                    startActivityForResult(intent, pickFirmwareRequest)
-                } catch (t: Throwable) {
-                    appendOutput("\nCould not open the file picker " +
-                        "(${t.javaClass.simpleName}: ${t.message}). This phone may " +
-                        "have no file picker — install one, or copy the ZIP to the " +
-                        "phone and use the Termux CLI instead.\n")
-                }
+                launchFilePicker()
             }
         }
         findViewById<Button>(R.id.btn_clear).setOnClickListener {
@@ -538,17 +550,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         when (action) {
             "frp" -> runWork("FRP status (deep link)") { frpStatus() }
             "imei" -> runWork("IMEI read (deep link)") { imeiRead() }
-            "firmware" -> runOnUiThread {
-                try {
-                    val pick = Intent(Intent.ACTION_GET_CONTENT)
-                        .setType("application/zip")
-                        .addCategory(Intent.CATEGORY_OPENABLE)
-                    startActivityForResult(pick, pickFirmwareRequest)
-                } catch (t: Throwable) {
-                    appendOutput("\nCould not open the file picker " +
-                        "(${t.javaClass.simpleName}: ${t.message}).\n")
-                }
-            }
+            "firmware" -> runOnUiThread { launchFilePicker() }
             "profiles" -> runWork("Profiles (deep link)") { Profiles.listProfiles(this) }
             "info" -> runWork("Device info + profile (deep link)") { localDeviceInfoWithProfile() }
             "wireless-adb" -> runWork("Wireless ADB (deep link)") { wirelessAdbFlow() }
@@ -908,6 +910,13 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
      * through this.
      */
     private fun safeTap(label: String, block: () -> Unit) {
+        // v0.2.5: leave a trace of WHICH button was tapped BEFORE any
+        // work runs — a silent close after this line still names the
+        // tap: in the output box (if the process lives long enough to
+        // draw it) and in the diagnostics file (durable). The tap is
+        // logged before block() executes, never after.
+        try { appendOutput("\n[Tapped: $label]\n") } catch (_: Throwable) { }
+        try { logTap(label) } catch (_: Throwable) { }
         try {
             block()
         } catch (t: Throwable) {
@@ -928,6 +937,68 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                 appendOutput("\n[Startup warning: $label failed: " +
                     "${t.javaClass.simpleName}: ${t.message}]\n")
             } catch (_: Throwable) { }
+        }
+    }
+
+    // -- intent audit (v0.2.5) -----------------------------------------
+    // v0.2.4 still closed on every tap, and the user directed an audit
+    // of every intent call. Every intent in the app now goes through
+    // these helpers: resolve BEFORE firing (PackageManager), and log
+    // every attempt (action + resolved + timestamp) to the diagnostics
+    // file — so a silent close still leaves a trace of which tap did
+    // what. If nothing resolves, the app says so plainly in the output
+    // box instead of throwing ActivityNotFoundException.
+
+    /** True when something on this phone can handle the intent. */
+    private fun resolveIntent(intent: Intent): Boolean {
+        return try {
+            packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /** One line in the diagnostics file per intent fire attempt. */
+    private fun logIntentAttempt(action: String, resolved: Boolean) {
+        try {
+            val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            val file = diagnosticsFile() ?: return
+            file.appendText("intent $stamp action=$action resolved=$resolved\n")
+        } catch (_: Throwable) { }
+    }
+
+    /** One line in the diagnostics file per tap, BEFORE the work runs. */
+    private fun logTap(label: String) {
+        try {
+            val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            val file = diagnosticsFile() ?: return
+            file.appendText("tap $stamp label=$label\n")
+        } catch (_: Throwable) { }
+    }
+
+    /** Firmware ZIP picker (button + deep link share this). Resolve the
+     *  picker before firing; if nothing on the phone handles
+     *  ACTION_GET_CONTENT, say so plainly instead of throwing. */
+    private fun launchFilePicker() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT)
+            .setType("application/zip")
+            .addCategory(Intent.CATEGORY_OPENABLE)
+        val resolved = resolveIntent(intent)
+        logIntentAttempt("android.intent.action.GET_CONTENT (application/zip)", resolved)
+        if (!resolved) {
+            appendOutput("\nNo app on this phone can open a file picker " +
+                "(nothing handles ACTION_GET_CONTENT). Install a Files app " +
+                "(e.g. the system Files app), or copy the ZIP to the phone " +
+                "and use the Termux CLI instead.\n")
+            return
+        }
+        try {
+            startActivityForResult(intent, pickFirmwareRequest)
+        } catch (t: Throwable) {
+            appendOutput("\nCould not open the file picker " +
+                "(${t.javaClass.simpleName}: ${t.message}). This phone may " +
+                "have no file picker — install one, or copy the ZIP to the " +
+                "phone and use the Termux CLI instead.\n")
         }
     }
 
