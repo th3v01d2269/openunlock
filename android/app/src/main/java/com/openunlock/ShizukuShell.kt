@@ -22,9 +22,19 @@ object ShizukuShell {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         } catch (e: Exception) { false }
 
-    fun requestPermission(activity: Activity, requestCode: Int) {
-        Shizuku.requestPermission(requestCode)
-    }
+    /**
+     * Ask Shizuku for permission. Returns false (instead of throwing)
+     * when the Shizuku service does not answer — v0.2.4: this call was
+     * unguarded on the main thread, so a binder failure on the tap
+     * closed the app.
+     */
+    fun requestPermission(activity: Activity, requestCode: Int): Boolean =
+        try {
+            Shizuku.requestPermission(requestCode)
+            true
+        } catch (t: Throwable) {
+            false
+        }
 
     /** Run one shell command as the shell user. Returns combined output. */
     fun run(cmd: String): String {

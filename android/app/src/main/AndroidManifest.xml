@@ -42,5 +42,12 @@
                 <data android:scheme="openunlock" />
             </intent-filter>
         </activity>
+        <!-- Crash screen (v0.2.4): launched by the global uncaught-
+             exception handler to show the crash instead of the app
+             silently vanishing. Never launched by the user. -->
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:label="OpenUnlock crashed" />
     </application>
 </manifest>

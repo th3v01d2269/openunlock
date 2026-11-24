@@ -1,12 +1,13 @@
 # OpenUnlock for Android
 
-A real Android app version of OpenUnlock (v0.2.3), built Nov 24, 2026.
-**APK: `android/app-debug.apk`** (669 KB, debug-signed, `com.openunlock`).
+A real Android app version of OpenUnlock (v0.2.4), built Nov 24, 2026.
+**APK: `android/app-debug.apk`** (debug-signed, `com.openunlock`).
 
-> **Not tested on a real phone.** There is no Android device in the build
-> environment, so the APK is verified structurally only (aapt badging,
-> apksigner v2+v3, dex class listing). Install it on a phone and try the
-> offline features first — they need no Shizuku and no other phone.
+> **Tested on a real phone (moto g 2025, Android 15) — partially.**
+> v0.2.3 opens; every button tap closed the app. v0.2.4 is the fix for
+> that (global crash handler + guarded tap handlers). No other device
+> testing exists; the APK is otherwise verified structurally (aapt
+> badging, apksigner v2+v3, dex class listing).
 
 ## What it is
 
@@ -72,6 +73,25 @@ screen has a Diagnostics section (version, Shizuku, NFC, last startup
 error, diagnostics file path) plus a "Save diagnostics to file"
 button.
 
+**v0.2.4 — tap-crash fix, also additive.** v0.2.3 opened on the moto g
+but EVERY button tap closed the app with no visible error. Static
+review exonerated `TextView.append()` (AOSP self-converts to EDITABLE
+on API 34/35, verified against the platform source) and the guarded
+tap paths — but found real holes: `runWork()` caught only `Exception`,
+so an `Error` (or any uncaught `Throwable` on ANY thread — in Android
+an uncaught worker-thread throw kills the whole process) closed the
+app silently, and `Shizuku.requestPermission` plus the firmware file
+picker were unguarded on the main thread. Changes: a global
+uncaught-exception handler installed FIRST in `onCreate` (any thread:
+save the crash to the diagnostics file, show it in a new
+`CrashActivity` instead of vanishing); every tap handler wrapped in
+`safeTap()`; `runWork()` catches `Throwable` and guards its post-back;
+`appendOutput()` has a setText fallback; the Shizuku permission
+request returns false instead of throwing; the file picker is
+guarded; and the version line sits at the TOP of the main screen
+("OpenUnlock 0.2.4 — tap a button, watch this box") so the installed
+build is verifiable at a glance.
+
 ## App won't open? (troubleshooting)
 
 1. **Uninstall fully, then install fresh.** Settings → Apps →
@@ -89,6 +109,27 @@ button.
    no screen, no crash dialog), the failure is before the Activity
    runs at all — most likely a stale install state or a bad install.
    Do step 1, then check free storage and reinstall.
+
+## Buttons close the app? (troubleshooting)
+
+1. **Check the version line at the top of the screen.** It must say
+   **"OpenUnlock 0.2.4 (code 6)"**. If it says 0.2.3 (or anything
+   else), the old build is still installed — uninstall fully
+   (Settings → Apps → OpenUnlock → Uninstall) and install the new
+   APK fresh. Do not install over the old one.
+2. **Read what the app says.** v0.2.4 never closes silently on a tap:
+   a tap failure prints `[Button '…' failed: …]` in the output box,
+   and an uncaught crash opens a "OpenUnlock crashed" screen with the
+   full stack trace. Screenshot it (or copy the text) and send it
+   back — it names the exact exception. The same text is saved to
+   `Android/data/com.openunlock/files/openunlock-diagnostics.txt`
+   (Files app → Internal storage → Android → data → com.openunlock
+   → files).
+3. **If a tap still closes the app with no screen at all**, the
+   failure is outside the app's code (install state, storage, or the
+   system killing it). Uninstall fully, check free storage, reinstall
+   fresh, and try the offline buttons first (FRP method catalog,
+   All device profiles) — they need no Shizuku and no other phone.
 
 ## Install
 
@@ -159,14 +200,14 @@ reason above.
 
 ## Verification done here
 
-* `aapt dump badging`: package `com.openunlock`, versionCode 5,
-  versionName 0.2.3, minSdk 26, targetSdk 34, permissions
+* `aapt dump badging`: package `com.openunlock`, versionCode 6,
+  versionName 0.2.4, minSdk 26, targetSdk 34, permissions
   `moe.shizuku.manager.permission.API_V23` + `android.permission.NFC`,
   launchable `com.openunlock.MainActivity`, intent filters for
   `openunlock://` (VIEW + NDEF_DISCOVERED), singleTop.
 * `apksigner verify --verbose`: v2 + v3 schemes true, 1 signer.
-* `dexdump`: all six app classes present
-  (MainActivity, ShizukuShell, Profiles, FrpCatalog, Imei, Firmware)
+* `dexdump`: all seven app classes present
+  (MainActivity, CrashActivity, ShizukuShell, Profiles, FrpCatalog, Imei, Firmware)
   plus Kotlin stdlib and the Shizuku API; MainActivity implements
   `NfcAdapter.ReaderCallback` (`onTagDiscovered`, `wirelessAdbFlow`,
   `pairAndConnect`, `findAdbBinary` all present), NsdManager refs present.

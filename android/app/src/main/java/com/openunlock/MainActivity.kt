@@ -26,7 +26,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * OpenUnlock on Android (native Kotlin build, v0.2.3).
+ * OpenUnlock on Android (native Kotlin build, v0.2.4).
  *
  * v0.2.3 is a diagnostic + hardened release: v0.2.2 installed on the
  * user's moto g 2025 (Android 15) but would not open at all, with no
@@ -37,6 +37,20 @@ import java.util.Locale
  * moves all Shizuku listener setup into onCreate, wraps onCreate and
  * every startup helper in try/catch, and shows a startup failure on
  * screen (plus a diagnostics file) instead of silently closing.
+ *
+ * v0.2.4: v0.2.3 opened, but EVERY button tap closed the app. Static
+ * review exonerated TextView.append() (AOSP self-converts to EDITABLE
+ * on API 34/35, verified against the platform source) and the guarded
+ * tap paths — but found real holes: runWork() caught only Exception,
+ * so an Error (or any uncaught Throwable on ANY thread — in Android
+ * an uncaught worker-thread throw kills the whole process) closed the
+ * app silently; Shizuku.requestPermission and the firmware file
+ * picker were unguarded on the main thread. This build installs a
+ * global uncaught-exception handler FIRST in onCreate (any thread:
+ * save the crash, show it in CrashActivity), wraps every tap handler
+ * in safeTap(), catches Throwable in runWork(), and puts the version
+ * line at the TOP of the screen so the installed build is verifiable
+ * at a glance.
  *
  * Live shell work goes through Shizuku (adb privileges, no root). Offline
  * features — profiles, FRP catalog, IMEI checks, firmware inspection —
@@ -78,11 +92,17 @@ import java.util.Locale
 class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     companion object {
-        const val VERSION_NAME = "0.2.3"
-        const val VERSION_CODE = 5
+        const val VERSION_NAME = "0.2.4"
+        const val VERSION_CODE = 6
+
+        // Installed once per process: reinstalling would chain the
+        // handler to itself (onCreate runs again on recreation).
+        @Volatile
+        private var crashHandlerInstalled = false
     }
 
     private lateinit var output: TextView
+    private lateinit var statusVersion: TextView
     private lateinit var statusShizuku: TextView
     private lateinit var statusDiagnostics: TextView
     private lateinit var inputProfile: EditText
@@ -131,6 +151,11 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     private var permissionListener: Shizuku.OnRequestPermissionResultListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // FIRST, before anything else can throw: the global crash
+        // handler. Any uncaught Throwable on ANY thread is saved to the
+        // diagnostics file and shown in CrashActivity instead of the
+        // app silently vanishing (v0.2.3's tap crash left no trace).
+        installCrashHandler()
         super.onCreate(savedInstanceState)
         try {
             onCreateInner(savedInstanceState)
@@ -139,6 +164,44 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             // silently closing, and save it for the report-back.
             try { saveStartupError(t) } catch (_: Throwable) { }
             try { showStartupErrorUI(t) } catch (_: Throwable) { }
+        }
+    }
+
+    /**
+     * Global uncaught-exception handler (v0.2.4). Installed once per
+     * process, first thing in onCreate. On any uncaught Throwable —
+     * main thread OR worker thread (an uncaught worker-thread throw
+     * kills the whole process in Android, which runWork()'s
+     * catch-Exception-only could not prevent) — save the full stack
+     * trace + device info, launch CrashActivity to show it, then let
+     * the process die. The startActivity call is a synchronous binder
+     * call, so the launch is recorded before the process is killed
+     * and the system restarts the app for CrashActivity.
+     */
+    private fun installCrashHandler() {
+        if (crashHandlerInstalled) return
+        crashHandlerInstalled = true
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                val crashText = try { diagnosticsText(throwable) } catch (_: Throwable) { throwable.toString() }
+                val file = try { diagnosticsFile() } catch (_: Throwable) { null }
+                try {
+                    file?.appendText(
+                        "=== crash $stamp (thread ${thread.name}) ===\n$crashText\n"
+                    )
+                } catch (_: Throwable) { }
+                val intent = Intent(this@MainActivity, CrashActivity::class.java).apply {
+                    putExtra(CrashActivity.EXTRA_CRASH, crashText)
+                    putExtra(CrashActivity.EXTRA_FILE, file?.absolutePath ?: "")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+                try { startActivity(intent) } catch (_: Throwable) { }
+            } catch (_: Throwable) { }
+            try { previous?.uncaughtException(thread, throwable) } catch (_: Throwable) { }
+            try { android.os.Process.killProcess(android.os.Process.myPid()) } catch (_: Throwable) { }
+            try { System.exit(10) } catch (_: Throwable) { }
         }
     }
 
@@ -151,7 +214,13 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         inputImei = findViewById(R.id.input_imei)
         inputFrpMethod = findViewById(R.id.input_frp_method)
 
-        output.text = "OpenUnlock $VERSION_NAME (native Android build)\n"
+        output.text = "OpenUnlock $VERSION_NAME — tap a button, watch this box.\n"
+
+        // Version line at the TOP (v0.2.4): the user can confirm the
+        // installed build at a glance, without scrolling to Diagnostics.
+        statusVersion = findViewById(R.id.status_version)
+        statusVersion.text = "OpenUnlock $VERSION_NAME (code $VERSION_CODE) — " +
+            "tap a button, watch the output box below."
 
         try {
             val listener = Shizuku.OnRequestPermissionResultListener { _, _ ->
@@ -171,87 +240,128 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         inputPairCode = findViewById(R.id.input_pair_code)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         safeCall("NFC status") { updateNfcStatus() }
-        btnNfcReader.setOnClickListener { toggleNfcReader() }
-        btnNfcDefault.setOnClickListener { cycleNfcDefaultAction() }
+        btnNfcReader.setOnClickListener { safeTap("NFC reader") { toggleNfcReader() } }
+        btnNfcDefault.setOnClickListener { safeTap("NFC default") { cycleNfcDefaultAction() } }
         findViewById<Button>(R.id.btn_wireless_adb).setOnClickListener {
-            runWork("Wireless ADB (auto-enable)") { wirelessAdbFlow() }
+            safeTap("Enable wireless ADB") {
+                runWork("Wireless ADB (auto-enable)") { wirelessAdbFlow() }
+            }
         }
         findViewById<Button>(R.id.btn_pair).setOnClickListener {
-            val code = inputPairCode.text.toString().trim()
-            runWork("Pair + connect") { pairAndConnect(code) }
+            safeTap("Pair + connect") {
+                val code = inputPairCode.text.toString().trim()
+                runWork("Pair + connect") { pairAndConnect(code) }
+            }
         }
         // Deep link that launched the app (Tasker / Termux / am start).
         safeCall("Deep link") { handleIntent(intent) }
 
         findViewById<Button>(R.id.btn_shizuku_perm).setOnClickListener {
-            if (!ShizukuShell.isRunning()) {
-                appendOutput("Shizuku is not running. Install the Shizuku app, " +
-                    "start it, and pair wireless debugging first — see docs/ANDROID.md.\n")
-            } else {
-                ShizukuShell.requestPermission(this, shizukuPermissionRequest)
+            safeTap("Request Shizuku permission") {
+                if (!ShizukuShell.isRunning()) {
+                    appendOutput("Shizuku is not running. Install the Shizuku app, " +
+                        "start it, and pair wireless debugging first — see docs/ANDROID.md.\n")
+                } else if (!ShizukuShell.requestPermission(this, shizukuPermissionRequest)) {
+                    appendOutput("Could not ask Shizuku for permission " +
+                        "(the Shizuku service did not answer). Open the Shizuku app " +
+                        "and check it is started, then try again.\n")
+                }
             }
         }
 
         findViewById<Button>(R.id.btn_devices).setOnClickListener {
-            runWork("This phone (via Shizuku)") { localDeviceInfo() }
+            safeTap("This phone (device info)") {
+                runWork("This phone (via Shizuku)") { localDeviceInfo() }
+            }
         }
         findViewById<Button>(R.id.btn_info).setOnClickListener {
-            runWork("Device info + profile") { localDeviceInfoWithProfile() }
+            safeTap("Device info + brand profile") {
+                runWork("Device info + profile") { localDeviceInfoWithProfile() }
+            }
         }
         findViewById<Button>(R.id.btn_frp_status).setOnClickListener {
-            runWork("FRP status") { frpStatus() }
+            safeTap("FRP status") {
+                runWork("FRP status") { frpStatus() }
+            }
         }
         findViewById<Button>(R.id.btn_frp_methods).setOnClickListener {
-            runWork("FRP method catalog") { FrpCatalog.catalogText(this) }
+            safeTap("FRP method catalog") {
+                runWork("FRP method catalog") { FrpCatalog.catalogText(this) }
+            }
         }
         findViewById<Button>(R.id.btn_frp_official).setOnClickListener {
-            runWork("Official FRP recovery") { FrpCatalog.officialPath(this) }
+            safeTap("FRP official recovery") {
+                runWork("Official FRP recovery") { FrpCatalog.officialPath(this) }
+            }
         }
         findViewById<Button>(R.id.btn_frp_run).setOnClickListener {
-            val id = inputFrpMethod.text.toString().trim()
-                .ifEmpty { "talkback-settings" }
-            runWork("Run FRP method: $id") { runFrpMethod(id) }
+            safeTap("Run FRP method") {
+                val id = inputFrpMethod.text.toString().trim()
+                    .ifEmpty { "talkback-settings" }
+                runWork("Run FRP method: $id") { runFrpMethod(id) }
+            }
         }
         findViewById<Button>(R.id.btn_imei_read).setOnClickListener {
-            runWork("IMEI read") { imeiRead() }
+            safeTap("IMEI read") {
+                runWork("IMEI read") { imeiRead() }
+            }
         }
         findViewById<Button>(R.id.btn_imei_verify).setOnClickListener {
-            val number = inputImei.text.toString().trim()
-            runWork("IMEI Luhn check") {
-                if (number.isEmpty()) "Type a 15-digit IMEI in the box first."
-                else "IMEI $number — Luhn valid: ${Imei.luhnValid(number)}"
+            safeTap("Luhn check") {
+                val number = inputImei.text.toString().trim()
+                runWork("IMEI Luhn check") {
+                    if (number.isEmpty()) "Type a 15-digit IMEI in the box first."
+                    else "IMEI $number — Luhn valid: ${Imei.luhnValid(number)}"
+                }
             }
         }
         findViewById<Button>(R.id.btn_profiles).setOnClickListener {
-            runWork("Profiles") { Profiles.listProfiles(this) }
+            safeTap("All device profiles") {
+                runWork("Profiles") { Profiles.listProfiles(this) }
+            }
         }
         findViewById<Button>(R.id.btn_profile_show).setOnClickListener {
-            val q = inputProfile.text.toString().trim().ifEmpty { "samsung" }
-            runWork("Profile: $q") { Profiles.formatProfile(Profiles.getProfile(this, q)) }
+            safeTap("Show profile") {
+                val q = inputProfile.text.toString().trim().ifEmpty { "samsung" }
+                runWork("Profile: $q") { Profiles.formatProfile(Profiles.getProfile(this, q)) }
+            }
         }
         findViewById<Button>(R.id.btn_firmware).setOnClickListener {
-            val intent = Intent(Intent.ACTION_GET_CONTENT)
-                .setType("application/zip")
-                .addCategory(Intent.CATEGORY_OPENABLE)
-            startActivityForResult(intent, pickFirmwareRequest)
+            safeTap("Inspect firmware ZIP") {
+                try {
+                    val intent = Intent(Intent.ACTION_GET_CONTENT)
+                        .setType("application/zip")
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                    startActivityForResult(intent, pickFirmwareRequest)
+                } catch (t: Throwable) {
+                    appendOutput("\nCould not open the file picker " +
+                        "(${t.javaClass.simpleName}: ${t.message}). This phone may " +
+                        "have no file picker — install one, or copy the ZIP to the " +
+                        "phone and use the Termux CLI instead.\n")
+                }
+            }
         }
         findViewById<Button>(R.id.btn_clear).setOnClickListener {
-            output.text = ""
+            safeTap("Clear output") {
+                try { output.text = "" } catch (_: Throwable) { }
+            }
         }
 
         // -- Diagnostics section (v0.2.3) -------------------------------
         statusDiagnostics = findViewById(R.id.status_diagnostics)
         findViewById<Button>(R.id.btn_diagnostics).setOnClickListener {
-            runWork("Save diagnostics") {
-                val file = diagnosticsFile()
-                if (file == null) {
-                    "Could not open a diagnostics file on this phone."
-                } else {
-                    try {
-                        file.writeText(diagnosticsText())
-                        "Diagnostics saved to:\n${file.absolutePath}"
-                    } catch (e: Exception) {
-                        "Could not save diagnostics: ${e.message}"
+            safeTap("Save diagnostics") {
+                runWork("Save diagnostics") {
+                    val file = diagnosticsFile()
+                    if (file == null) {
+                        "Could not open a diagnostics file on this phone."
+                    } else {
+                        try {
+                            file.writeText(diagnosticsText())
+                            "Diagnostics saved to:\n${file.absolutePath}"
+                        } catch (e: Exception) {
+                            "Could not save diagnostics: ${e.message}"
+                        }
                     }
                 }
             }
@@ -275,7 +385,9 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIntent(intent)
+        try { handleIntent(intent) } catch (t: Throwable) {
+            try { appendOutput("\n[Deep link failed: ${t.javaClass.simpleName}: ${t.message}]\n") } catch (_: Throwable) { }
+        }
     }
 
     override fun onDestroy() {
@@ -287,19 +399,23 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != pickFirmwareRequest || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        runWork("Firmware inspect") {
-            val tmp = File(cacheDir, "firmware.zip")
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(tmp).use { out -> input.copyTo(out) }
+        try {
+            if (requestCode != pickFirmwareRequest || resultCode != RESULT_OK) return
+            val uri = data?.data ?: return
+            runWork("Firmware inspect") {
+                val tmp = File(cacheDir, "firmware.zip")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tmp).use { out -> input.copyTo(out) }
+                }
+                val deviceProps = if (ShizukuShell.isRunning() && ShizukuShell.hasPermission()) {
+                    parseGetprop(ShizukuShell.runQuiet("getprop"))
+                } else {
+                    null
+                }
+                Firmware.formatReport(Firmware.inspect(tmp.absolutePath, deviceProps))
             }
-            val deviceProps = if (ShizukuShell.isRunning() && ShizukuShell.hasPermission()) {
-                parseGetprop(ShizukuShell.runQuiet("getprop"))
-            } else {
-                null
-            }
-            Firmware.formatReport(Firmware.inspect(tmp.absolutePath, deviceProps))
+        } catch (t: Throwable) {
+            try { appendOutput("\n[Firmware inspect failed: ${t.javaClass.simpleName}: ${t.message}]\n") } catch (_: Throwable) { }
         }
     }
 
@@ -378,17 +494,25 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
      * never identity: Android randomizes it per tap.
      */
     override fun onTagDiscovered(tag: Tag) {
-        val uid = tag.id.joinToString("") { "%02x".format(it) }
-        val techs = tag.techList.joinToString(", ") { it.substringAfterLast('.') }
-        runOnUiThread {
-            appendOutput(
-                "\n--- NFC tap detected ---\n" +
-                "Tag UID: $uid (info only — randomized per tap, NOT identity)\n" +
-                "Tech: $techs\n"
-            )
-            runDeepLinkAction(nfcDefaultAction)
-            runWork("Wireless ADB (auto-enable)") { wirelessAdbFlow() }
-        }
+        // Binder thread: an uncaught throw here kills the process too,
+        // so guard the whole callback (v0.2.4).
+        try {
+            val uid = tag.id.joinToString("") { "%02x".format(it) }
+            val techs = tag.techList.joinToString(", ") { it.substringAfterLast('.') }
+            runOnUiThread {
+                try {
+                    appendOutput(
+                        "\n--- NFC tap detected ---\n" +
+                        "Tag UID: $uid (info only — randomized per tap, NOT identity)\n" +
+                        "Tech: $techs\n"
+                    )
+                    runDeepLinkAction(nfcDefaultAction)
+                    runWork("Wireless ADB (auto-enable)") { wirelessAdbFlow() }
+                } catch (t: Throwable) {
+                    try { appendOutput("\n[NFC tap handling failed: ${t.javaClass.simpleName}: ${t.message}]\n") } catch (_: Throwable) { }
+                }
+            }
+        } catch (_: Throwable) { }
     }
 
     /** Deep link that opened (or re-opened) the app: openunlock://<action>.
@@ -415,10 +539,15 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             "frp" -> runWork("FRP status (deep link)") { frpStatus() }
             "imei" -> runWork("IMEI read (deep link)") { imeiRead() }
             "firmware" -> runOnUiThread {
-                val pick = Intent(Intent.ACTION_GET_CONTENT)
-                    .setType("application/zip")
-                    .addCategory(Intent.CATEGORY_OPENABLE)
-                startActivityForResult(pick, pickFirmwareRequest)
+                try {
+                    val pick = Intent(Intent.ACTION_GET_CONTENT)
+                        .setType("application/zip")
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                    startActivityForResult(pick, pickFirmwareRequest)
+                } catch (t: Throwable) {
+                    appendOutput("\nCould not open the file picker " +
+                        "(${t.javaClass.simpleName}: ${t.message}).\n")
+                }
             }
             "profiles" -> runWork("Profiles (deep link)") { Profiles.listProfiles(this) }
             "info" -> runWork("Device info + profile (deep link)") { localDeviceInfoWithProfile() }
@@ -643,10 +772,14 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             }
         }
         Handler(Looper.getMainLooper()).postDelayed({
-            for (l in listeners) {
-                try { nsd.stopServiceDiscovery(l) } catch (e: Exception) { }
+            try {
+                for (l in listeners) {
+                    try { nsd.stopServiceDiscovery(l) } catch (e: Exception) { }
+                }
+                runWork("Wireless ADB (mDNS scan)") { onWirelessDiscoveryDone(adb) }
+            } catch (t: Throwable) {
+                try { appendOutput("\n[mDNS scan finish failed: ${t.javaClass.simpleName}: ${t.message}]\n") } catch (_: Throwable) { }
             }
-            runWork("Wireless ADB (mDNS scan)") { onWirelessDiscoveryDone(adb) }
         }, 10_000)
     }
 
@@ -756,7 +889,33 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     }
 
     private fun appendOutput(text: String) {
-        output.append(text)
+        // Defensive (v0.2.4): TextView.append() is safe on API 34/35
+        // (AOSP converts to EDITABLE itself), but a tap must never die
+        // here — fall back to setText concatenation, then swallow.
+        try {
+            output.append(text)
+        } catch (t: Throwable) {
+            try {
+                output.text = (output.text?.toString() ?: "") + text
+            } catch (_: Throwable) { }
+        }
+    }
+
+    /**
+     * Run a tap handler; a failure is printed in the output box
+     * instead of closing the app (v0.2.4: every button tap in v0.2.3
+     * closed the app with no trace). Every on-screen button goes
+     * through this.
+     */
+    private fun safeTap(label: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            try {
+                appendOutput("\n[Button '$label' failed: " +
+                    "${t.javaClass.simpleName}: ${t.message}]\n")
+            } catch (_: Throwable) { }
+        }
     }
 
     /** Run a startup helper; a failure is reported in the output box
@@ -885,14 +1044,31 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         } catch (_: Throwable) { }
     }
 
+    /**
+     * Run work off the main thread and print the result (v0.2.4: catch
+     * Throwable, not just Exception — an uncaught throw on ANY thread
+     * kills the whole process in Android, so an Error on this worker
+     * used to close the app silently; and guard the post-back too).
+     */
     private fun runWork(label: String, work: () -> String) {
-        appendOutput("\n--- $label ---\n")
-        Thread {
-            val result = try { work() } catch (e: Exception) {
-                "ERROR: ${e.message}"
-            }
-            runOnUiThread { appendOutput(result + "\n") }
-        }.start()
+        try { appendOutput("\n--- $label ---\n") } catch (_: Throwable) { }
+        try {
+            Thread {
+                val result = try { work() } catch (t: Throwable) {
+                    "ERROR: ${t.javaClass.simpleName}: ${t.message}"
+                }
+                try {
+                    runOnUiThread {
+                        try { appendOutput(result + "\n") } catch (_: Throwable) { }
+                    }
+                } catch (_: Throwable) { }
+            }.start()
+        } catch (t: Throwable) {
+            try {
+                appendOutput("\n[Could not start '$label': " +
+                    "${t.javaClass.simpleName}: ${t.message}]\n")
+            } catch (_: Throwable) { }
+        }
     }
 
     private fun parseGetprop(text: String): Map<String, String> {

@@ -42,7 +42,7 @@ echo "== aapt2 link =="
     -I "$PLATFORM" \
     --manifest "$ANDROID_DIR/app/src/main/AndroidManifest.xml" \
     --min-sdk-version 26 --target-sdk-version 34 \
-    --version-code 5 --version-name 0.2.3 \
+    --version-code 6 --version-name 0.2.4 \
     --auto-add-overlay \
     --java "$BUILD/gen" \
     -R "$BUILD/compiled-res.zip"
