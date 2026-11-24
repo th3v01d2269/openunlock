@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openunlock"
+version = "0.2.0"
+description = "Open-source Android phone servicing toolkit: device info, bootloader unlock, flashing, backup"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "OpenUnlock contributors" }]
+keywords = ["android", "adb", "fastboot", "bootloader", "flashing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: System :: Hardware",
+]
+
+[project.scripts]
+openunlock = "openunlock.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["openunlock*"]
