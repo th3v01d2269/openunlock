@@ -1,18 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- OpenUnlock NFC — Tasker project (fallback path).
-     Primary trigger is the OpenUnlock app itself in NFC reader mode:
-     tap a client phone to the host phone and the app detects it and
-     runs its default action + the wireless-ADB flow. This Tasker
-     project is the FALLBACK for when the app is not open in reader mode.
-     Each profile fires on ANY NFC tag (event code 600, blank tag ID)
-     and opens the matching openunlock:// deep link in the app.
-     Honest limit: a client phone randomizes its tag UID per tap, so an
-     NFC profile can never reliably match one specific client — that is
-     why the app's reader mode is primary and this is fallback only.
-     Task "OU CLI FRP status (Termux)" runs the Python CLI in Termux via
-     the documented com.termux.RUN_COMMAND service intent; it needs the
-     com.termux.permission.RUN_COMMAND permission — test it once, and if
-     Termux ignores it, use the Termux:Tasker plugin action in the UI.
+<!-- OpenUnlock — Tasker project (v0.2.2).
+     THREE ways Tasker drives Shizuku here, all of them real on this phone:
+     A. Deep links — Tasker opens openunlock:// URIs and the APP does the
+        Shizuku work (same action as the on-screen button). Map:
+          openunlock://frp           -> FRP status (Shizuku: getprop/settings/ls)
+          openunlock://imei          -> IMEI read (Shizuku: dumpsys / service call)
+          openunlock://firmware      -> firmware ZIP picker (Shizuku getprop if allowed)
+          openunlock://profiles      -> all profiles (offline, no Shizuku)
+          openunlock://info          -> device info + profile (Shizuku: getprop)
+          openunlock://wireless-adb  -> run the wireless-ADB flow (Shizuku + adb)
+          openunlock://adb-devices   -> print `adb devices` (Shizuku + adb)
+          openunlock://shizuku-status -> print the Shizuku state (no Shizuku needed)
+          openunlock://pair?code=123456 -> pair + connect (Shizuku + adb)
+          openunlock://nfc-reader    -> arm the NFC reader (no Shizuku needed)
+     B. Tasker Run Shell with "Use Shizuku" ticked — Tasker itself runs
+        shell commands as the ADB shell user (uid 2000). This is the
+        phone's established pattern (Battery Saver / Grant Permissions /
+        Tunnel Status Check in the main project). The XML encoding of the
+        "Use Shizuku" tick is NOT published anywhere checkable, so it is
+        NOT set in this file: after importing, open each Run Shell action
+        and tick "Use Shizuku" (or turn on Tasker Preferences > Misc >
+        "Use Shizuku By Default"). Without the tick the command runs as
+        plain Tasker shell and Shizuku checks read FAIL — the OU Check
+        Shizuku task says so in its own notification.
+     C. rish via Termux RUN_COMMAND — for commands that need the Termux
+        environment (the adb binary, the Python CLI). rish is the Shizuku
+        shell inside Termux: export it from the Shizuku app ("Use Shizuku
+        in terminal apps", edit PKG to com.termux) and put it where Termux
+        finds it ($PREFIX/bin/rish or ~/rish). The rish tasks write their
+        script to /storage/emulated/0/Tasker/ou-rish-*.sh, fire it with
+        the documented com.termux.RUN_COMMAND service intent, and the
+        script posts its result with termux-notification AND saves it to
+        /storage/emulated/0/Tasker/ou-rish-*.txt — RUN_COMMAND runs in
+        the background and cannot return output to Tasker, so the file
+        + notification is the result channel. OU Setup Check reports
+        exactly what is missing (rish / adb / python / ~/openunlock).
+     Primary trigger is still the OpenUnlock app itself in NFC reader
+     mode: tap a client phone to the host phone and the app detects it
+     and runs its default action + the wireless-ADB flow. The NFC
+     profiles below are the FALLBACK: each fires on ANY NFC tag (event
+     code 600, blank tag ID) and opens the matching deep link. A client
+     phone randomizes its UID per tap, so an NFC profile can never
+     reliably match one specific client — and all NFC profiles fire at
+     once on any tag, so enable only the ones you want and disable the
+     rest. The profile-less tasks (OU Wireless ADB - start/status,
+     OU Pair client, OU Check Shizuku, the OU rish tasks, OU Setup
+     Check, OU Check All) are run by hand from Tasker's Tasks tab, or
+     from the existing dispatcher by name.
+     Every task logs one line to /storage/emulated/0/Tasker/events.csv,
+     so a run can be proven from the log.
+     Action codes used here are ONLY the ones in the real Tasker 6.2.26
+     exports on this machine: Run Shell 123, Notify 523, Perform Task
+     130, NFC Tag event 600. No If/Else, Wait, or Read File actions —
+     conditionals are done inside the shell commands themselves.
      Import: Tasker → Menu → Data → Import Project → this file.
      After import, re-import is needed after any XML change. -->
 <TaskerData sr="" dvi="1" tv="6.2.26">
@@ -283,6 +323,452 @@
       <code>523</code>
       <Str sr="arg0" ve="3">OpenUnlock CLI - FRP status</Str>
       <Str sr="arg1" ve="3">Asked Termux to run: python -m openunlock frp status. Check the Termux session for the result.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task307">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>307</id>
+    <nme>OU Wireless ADB - start</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_wireless_adb_start" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://wireless-adb'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Wireless ADB</Str>
+      <Str sr="arg1" ve="3">Started the wireless-ADB flow in the app (USB OTG first, else mDNS pairing). Watch the app output.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task308">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>308</id>
+    <nme>OU Wireless ADB - status</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_wireless_adb_status" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://adb-devices'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - adb devices</Str>
+      <Str sr="arg1" ve="3">Asked the app to print `adb devices` (via Shizuku + Termux adb). Watch the app output.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task309">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>309</id>
+    <nme>OU Pair client</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_pair_client" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://pair'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Pair client</Str>
+      <Str sr="arg1" ve="3">Read the 6-digit code off the client's Wireless debugging screen, type it into the Pairing code box in the app, and tap Pair + connect.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task310">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>310</id>
+    <nme>OU Check Shizuku</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_shizuku_check,ran" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">OUT=$(id 2&gt;&amp;1); case "$OUT" in *uid=2000*) R="OK - Shizuku running ($OUT)";; *) R="FAIL - Shizuku NOT running or this action lacks the Use Shizuku tick. Open the Shizuku app and tap Start via Wireless Debugging. Then open this task in Tasker, tap the Run Shell action, tick Use Shizuku, and save.";; esac; echo "$(date '+%F %T'),ou_shizuku_check,$R" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true; echo "$R"</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3">%OU_SHIZUKU</Str>
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Shizuku check</Str>
+      <Str sr="arg1" ve="3">%OU_SHIZUKU</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task311">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>311</id>
+    <nme>OU rish - Shizuku status</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_rish_shizuku_status" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">printf '%s\n' '#!/system/bin/sh' 'R=$(command -v rish)' '[ -z "$R" ] &amp;&amp; R=$HOME/rish' 'OUT="rish NOT FOUND - export it from Shizuku: Use Shizuku in terminal apps - PKG=com.termux"' '[ -x "$R" ] &amp;&amp; OUT=$("$R" -c "id" 2&gt;&amp;1)' 'echo "$OUT" &gt; /storage/emulated/0/Tasker/ou-rish-status.txt' 'termux-notification -t "OpenUnlock rish" -c "$OUT" 2&gt;/dev/null || true' &gt; /storage/emulated/0/Tasker/ou-rish-status.sh</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am startservice --user 0 -n com.termux/.app.RunCommandService -a com.termux.RUN_COMMAND --es com.termux.RUN_COMMAND_PATH /data/data/com.termux/files/usr/bin/sh --esa com.termux.RUN_COMMAND_ARGUMENTS "/storage/emulated/0/Tasker/ou-rish-status.sh" --es com.termux.RUN_COMMAND_WORKDIR /data/data/com.termux/files/home --ez com.termux.RUN_COMMAND_BACKGROUND true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act3" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock rish - Shizuku status</Str>
+      <Str sr="arg1" ve="3">Asked Termux (rish) to run: id. The result posts as a notification and is saved to Tasker/ou-rish-status.txt. If nothing posts, rish is not installed — run OU Setup Check.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task312">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>312</id>
+    <nme>OU rish - adb devices</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_rish_adb_devices" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">printf '%s\n' '#!/system/bin/sh' 'R=$(command -v rish)' '[ -z "$R" ] &amp;&amp; R=$HOME/rish' 'OUT="rish NOT FOUND - export it from Shizuku - PKG=com.termux"' '[ -x "$R" ] &amp;&amp; OUT=$("$R" -c "adb devices" 2&gt;&amp;1)' 'echo "$OUT" &gt; /storage/emulated/0/Tasker/ou-rish-adb.txt' 'termux-notification -t "OpenUnlock rish adb" -c "$OUT" 2&gt;/dev/null || true' &gt; /storage/emulated/0/Tasker/ou-rish-adb.sh</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am startservice --user 0 -n com.termux/.app.RunCommandService -a com.termux.RUN_COMMAND --es com.termux.RUN_COMMAND_PATH /data/data/com.termux/files/usr/bin/sh --esa com.termux.RUN_COMMAND_ARGUMENTS "/storage/emulated/0/Tasker/ou-rish-adb.sh" --es com.termux.RUN_COMMAND_WORKDIR /data/data/com.termux/files/home --ez com.termux.RUN_COMMAND_BACKGROUND true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act3" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock rish - adb devices</Str>
+      <Str sr="arg1" ve="3">Asked Termux (rish) to run: adb devices. The result posts as a notification and is saved to Tasker/ou-rish-adb.txt. If nothing posts, rish is not installed — run OU Setup Check.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task313">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>313</id>
+    <nme>OU rish - wireless ADB flow</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_rish_wireless_adb" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">printf '%s\n' '#!/system/bin/sh' 'R=$(command -v rish)' '[ -z "$R" ] &amp;&amp; R=$HOME/rish' '[ -x "$R" ] || { termux-notification -t "OpenUnlock rish" -c "rish NOT FOUND - run OU Setup Check"; exit 0; }' 'S=$("$R" -c "adb devices" 2&gt;/dev/null | grep "device$" | grep -v ":" | head -1 | cut -f1)' '[ -z "$S" ] &amp;&amp; { termux-notification -t "OpenUnlock rish" -c "No USB client found - plug the client in by USB OTG and run again"; exit 0; }' 'IP=$("$R" -c "adb -s $S shell getprop dhcp.wlan0.ipaddress" 2&gt;/dev/null | tr -d "[:space:]")' '[ -z "$IP" ] &amp;&amp; IP=$("$R" -c "adb -s $S shell ip -f inet addr show wlan0" 2&gt;/dev/null | grep -o "[0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*" | head -1)' '[ -z "$IP" ] &amp;&amp; { termux-notification -t "OpenUnlock rish" -c "No Wi-Fi IP for client - join Wi-Fi on the client and run again"; exit 0; }' '"$R" -c "adb -s $S tcpip 5555" &gt;/dev/null 2&gt;&amp;1' 'C=$("$R" -c "adb connect $IP:5555" 2&gt;&amp;1)' 'sleep 2' 'D=$("$R" -c "adb devices" 2&gt;&amp;1)' 'echo "$D" &gt; /storage/emulated/0/Tasker/ou-rish-wireless.txt' 'termux-notification -t "OpenUnlock wireless ADB" -c "$C - $IP:5555 - unplug USB now if adb devices shows it connected"' &gt; /storage/emulated/0/Tasker/ou-rish-wireless.sh</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am startservice --user 0 -n com.termux/.app.RunCommandService -a com.termux.RUN_COMMAND --es com.termux.RUN_COMMAND_PATH /data/data/com.termux/files/usr/bin/sh --esa com.termux.RUN_COMMAND_ARGUMENTS "/storage/emulated/0/Tasker/ou-rish-wireless.sh" --es com.termux.RUN_COMMAND_WORKDIR /data/data/com.termux/files/home --ez com.termux.RUN_COMMAND_BACKGROUND true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act3" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock rish - wireless ADB flow</Str>
+      <Str sr="arg1" ve="3">Asked Termux (rish) to run the USB-to-wireless flow: adb devices, tcpip 5555, connect. The result posts as a notification and is saved to Tasker/ou-rish-wireless.txt. This is the manual twin of the app's Path A — same steps, no app needed.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task314">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>314</id>
+    <nme>OU Setup Check - rish + adb</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_setup_check,ran" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">printf '%s\n' '#!/system/bin/sh' 'R=$(command -v rish)' '[ -z "$R" ] &amp;&amp; R=$HOME/rish' '[ -x "$R" ] &amp;&amp; RISH="FOUND $R" || RISH="MISSING - export it from Shizuku: Use Shizuku in terminal apps - PKG=com.termux"' 'A=$(command -v adb)' '[ -n "$A" ] &amp;&amp; ADB="FOUND $A" || ADB="MISSING - in Termux: pkg install android-tools"' 'P=$(command -v python)' '[ -n "$P" ] &amp;&amp; PY="FOUND $P" || PY="MISSING - in Termux: pkg install python"' '[ -d $HOME/openunlock ] &amp;&amp; OU="present" || OU="MISSING - git clone https://github.com/th3v01d2269/openunlock.git ~/openunlock"' '{ echo "rish: $RISH"; echo "adb: $ADB"; echo "python: $PY"; echo "openunlock: $OU"; } &gt; /storage/emulated/0/Tasker/ou-setup-check.txt' 'MSG=$(cat /storage/emulated/0/Tasker/ou-setup-check.txt)' 'termux-notification -t "OpenUnlock setup check" -c "$MSG" 2&gt;/dev/null || true' &gt; /storage/emulated/0/Tasker/ou-setup-check.sh</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am startservice --user 0 -n com.termux/.app.RunCommandService -a com.termux.RUN_COMMAND --es com.termux.RUN_COMMAND_PATH /data/data/com.termux/files/usr/bin/sh --esa com.termux.RUN_COMMAND_ARGUMENTS "/storage/emulated/0/Tasker/ou-setup-check.sh" --es com.termux.RUN_COMMAND_WORKDIR /data/data/com.termux/files/home --ez com.termux.RUN_COMMAND_BACKGROUND true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act3" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock setup check</Str>
+      <Str sr="arg1" ve="3">Asked Termux to check rish, adb, python, and ~/openunlock. The report posts as a notification and is saved to Tasker/ou-setup-check.txt — it says exactly what is missing and how to fix it.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task316">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>316</id>
+    <nme>OU Check All</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_check_all,ran" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>130</code>
+      <Str sr="arg0" ve="3">OU Check Shizuku</Str>
+      <Int sr="arg1" val="0" />
+      <Str sr="arg2" ve="3" />
+      <Str sr="arg3" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>130</code>
+      <Str sr="arg0" ve="3">OU Wireless ADB - status</Str>
+      <Int sr="arg1" val="0" />
+      <Str sr="arg2" ve="3" />
+      <Str sr="arg3" ve="3" />
+    </Action>
+    <Action sr="act3" ve="7">
+      <code>130</code>
+      <Str sr="arg0" ve="3">OU Setup Check - rish + adb</Str>
+      <Int sr="arg1" val="0" />
+      <Str sr="arg2" ve="3" />
+      <Str sr="arg3" ve="3" />
+    </Action>
+    <Action sr="act4" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - all checks ran</Str>
+      <Str sr="arg1" ve="3">Ran OU Check Shizuku, OU Wireless ADB - status, and OU Setup Check. Read their notifications; the setup report is saved to Tasker/ou-setup-check.txt.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Profile sr="prof206" ve="2">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <flags>8</flags>
+    <id>206</id>
+    <mid0>315</mid0>
+    <nme>OU NFC - Wireless ADB</nme>
+    <Event sr="con0" ve="2">
+      <code>600</code>
+      <pri>0</pri>
+      <Str sr="arg0" ve="3" />
+    </Event>
+  </Profile>
+  <Task sr="task315">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>315</id>
+    <nme>OU NFC Wireless ADB</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_nfc_wireless_adb" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://wireless-adb'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - Wireless ADB</Str>
+      <Str sr="arg1" ve="3">Tag tapped - starting the wireless-ADB flow in the app.</Str>
+      <Img sr="arg2" ve="2" />
+      <Int sr="arg3" val="0" />
+      <Int sr="arg4" val="0" />
+      <Int sr="arg5" val="3" />
+      <Int sr="arg6" val="0" />
+      <Int sr="arg7" val="3" />
+    </Action>
+  </Task>
+  <Task sr="task317">
+    <cdate>1795549620717</cdate>
+    <edate>1795549620717</edate>
+    <id>317</id>
+    <nme>OU Arm NFC reader</nme>
+    <Action sr="act0" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">echo "$(date '+%F %T'),ou_arm_nfc_reader" &gt;&gt; /storage/emulated/0/Tasker/events.csv 2&gt;/dev/null || true</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>123</code>
+      <Str sr="arg0" ve="3">am start -a android.intent.action.VIEW -d 'openunlock://nfc-reader'</Str>
+      <Int sr="arg1" val="0" />
+      <Int sr="arg2" val="0" />
+      <Str sr="arg3" ve="3" />
+      <Str sr="arg4" ve="3" />
+      <Str sr="arg5" ve="3" />
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>523</code>
+      <Str sr="arg0" ve="3">OpenUnlock - NFC reader armed</Str>
+      <Str sr="arg1" ve="3">Armed the app's NFC reader — tap a client phone to this phone. The reader stays armed only while the app is in front.</Str>
       <Img sr="arg2" ve="2" />
       <Int sr="arg3" val="0" />
       <Int sr="arg4" val="0" />

@@ -1,6 +1,6 @@
 # OpenUnlock — NFC tap-to-run
 
-**Version 0.2.1.** The client phone is the tag. No pre-programmed NFC
+**Version 0.2.2.** The client phone is the tag. No pre-programmed NFC
 tags, nothing to stick on a phone, nothing to write.
 
 > **Not tested on a real phone.** There is no Android device in the
@@ -143,13 +143,18 @@ You can also run the flow without a tap: **Enable wireless ADB
 
 The app answers these URIs, from Tasker, Termux, or a shell:
 
-| URI | Does |
-|---|---|
-| `openunlock://frp` | FRP status |
-| `openunlock://imei` | IMEI read (this phone) |
-| `openunlock://firmware` | Opens the firmware ZIP picker |
-| `openunlock://profiles` | Lists all device profiles |
-| `openunlock://info` | Device info + brand profile |
+| URI | Does | Shizuku? |
+|---|---|---|
+| `openunlock://frp` | FRP status | Yes |
+| `openunlock://imei` | IMEI read (this phone) | Yes |
+| `openunlock://firmware` | Opens the firmware ZIP picker | Partly |
+| `openunlock://profiles` | Lists all device profiles | No (offline) |
+| `openunlock://info` | Device info + brand profile | Yes |
+| `openunlock://wireless-adb` | Run the wireless-ADB flow | Yes (runs `adb`) |
+| `openunlock://adb-devices` | Print `adb devices` | Yes (runs `adb`) |
+| `openunlock://shizuku-status` | Print the Shizuku state | No (reports it) |
+| `openunlock://pair?code=123456` | Pair + connect (code from the client's screen) | Yes (runs `adb pair`) |
+| `openunlock://nfc-reader` | Arm the NFC reader | No |
 
 Try it from a shell on the host phone:
 
@@ -157,47 +162,66 @@ Try it from a shell on the host phone:
 am start -a android.intent.action.VIEW -d 'openunlock://frp'
 ```
 
-## Tasker project — fallback path
+## Tasker project — Shizuku in three paths (v0.2.2)
 
-File: `tasker/OpenUnlock-NFC.prj.xml`. Import in Tasker: Menu →
+File: `tasker/OpenUnlock-NFC.prj.xml`. Full write-up:
+[`tasker/README.md`](../tasker/README.md). Import in Tasker: Menu →
 Data → Import Project → the file. (Re-import after any XML change.)
 
-| Profile (NFC event, any tag) | Task | Does |
-|---|---|---|
-| OU NFC - FRP status | OU NFC FRP status | Opens `openunlock://frp` |
-| OU NFC - IMEI read | OU NFC IMEI read | Opens `openunlock://imei` |
-| OU NFC - Firmware inspect | OU NFC Firmware inspect | Opens `openunlock://firmware` |
-| OU NFC - Profiles | OU NFC Profiles | Opens `openunlock://profiles` |
-| OU NFC - Device info | OU NFC Device info | Opens `openunlock://info` |
+Tasker drives Shizuku three ways, and the project now uses all
+three:
 
-There is also a profile-less task, **OU CLI FRP status (Termux)**,
-which asks Termux to run `python -m openunlock frp status` via the
-documented `com.termux.RUN_COMMAND` service intent. Run it by hand
-from Tasker, or from the existing dispatcher by name. Duplicate it
-and change the arguments for other CLI commands.
+* **A. Deep links** — a task opens an `openunlock://` URI and the
+  app does the Shizuku work (same action as the on-screen button).
+  Tasks: OU Wireless ADB - start/status, OU Pair client, OU Arm NFC
+  reader, plus the six NFC profiles (one per action, including the
+  new OU NFC - Wireless ADB).
+* **B. Tasker Run Shell with "Use Shizuku" ticked** — Tasker runs a
+  shell command as the ADB shell user directly. Task **OU Check
+  Shizuku** runs `id` and notifies OK (uid=2000) or FAIL with the
+  fix. The tick is a manual step after import — the XML cannot set
+  it (its encoding is not published anywhere checkable).
+* **C. rish via Termux RUN_COMMAND** — for commands that need the
+  Termux environment (`adb`, the Python CLI). Tasks: OU rish -
+  Shizuku status, OU rish - adb devices, OU rish - wireless ADB
+  flow (the USB-to-wireless steps as a shell script), and **OU Setup
+  Check - rish + adb**, which reports exactly what is missing
+  (rish / adb / python / `~/openunlock`). RUN_COMMAND cannot return
+  output to Tasker, so each rish task saves its result to
+  `Tasker/ou-rish-*.txt` and posts it with `termux-notification`.
+  **OU Check All** runs the Shizuku check, the wireless-ADB status,
+  and the setup check in one go.
+
+There is also the earlier profile-less task, **OU CLI FRP status
+(Termux)**, which asks Termux to run `python -m openunlock frp
+status` via the documented `com.termux.RUN_COMMAND` service intent.
+Run it by hand from Tasker, or from the existing dispatcher by name.
+Duplicate it and change the arguments for other CLI commands.
 
 Each task logs one line to `/storage/emulated/0/Tasker/events.csv`
-(`ou_nfc_<action>`), so a run can be proven from the log — the same
+(`ou_<name>`), so a run can be proven from the log — the same
 proof rule as the rest of the automation: a broadcast alone proves
 nothing.
 
-**Why this is fallback, not primary:** the profiles fire on *any*
-NFC tag (blank tag ID, event code 600). A client phone randomizes
-its UID per tap, so an NFC profile can never reliably match one
-specific client — and when the app is open in reader mode, reader
-mode grabs the tag first anyway, so the Tasker profile only fires
-when the app is not armed. The app's reader mode is the reliable
-trigger; Tasker is the backup for when the app is not in front.
+**Why the NFC profiles are fallback, not primary:** the profiles
+fire on *any* NFC tag (blank tag ID, event code 600). A client
+phone randomizes its UID per tap, so an NFC profile can never
+reliably match one specific client — and when the app is open in
+reader mode, reader mode grabs the tag first anyway, so the Tasker
+profile only fires when the app is not armed. The app's reader
+mode is the reliable trigger; Tasker is the backup for when the
+app is not in front.
 
-**Tasker XML notes (for the next person who edits it):** the action
-codes were taken from a real Tasker 6.2.26 export on this phone:
-Run Shell = `123`, Notify = `523`, Perform Task = `130`, Intent
-Received event = `599`, NFC Tag event = `600`. The Run Shell actions
-use `am start …` (no root, no Shizuku needed for that). The
-`RUN_COMMAND` task needs the `com.termux.permission.RUN_COMMAND`
-permission to be granted — test it once; if Termux ignores the
-intent, build the same action in the Tasker UI with the
-Termux:Tasker plugin instead (30 seconds, guaranteed correct).
+**Tasker XML notes (for the next person who edits it):** only the
+action codes in the real Tasker 6.2.26 exports on this machine are
+used: Run Shell `123`, Notify `523`, Perform Task `130`, NFC Tag
+event `600`. No If/Else, Wait, or Read File actions — conditionals
+are done inside the shell commands themselves. The Run Shell
+actions use `am start …` (no root, no Shizuku needed for that). The
+`RUN_COMMAND` tasks need the `com.termux.permission.RUN_COMMAND`
+permission — test it once; if Termux ignores the intent, build the
+same action in the Tasker UI with the Termux:Tasker plugin instead
+(30 seconds, guaranteed correct).
 
 ## Requirements
 

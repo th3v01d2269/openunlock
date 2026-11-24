@@ -18,7 +18,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * OpenUnlock on Android (native Kotlin build, v0.2.1).
+ * OpenUnlock on Android (native Kotlin build, v0.2.2).
  *
  * Live shell work goes through Shizuku (adb privileges, no root). Offline
  * features — profiles, FRP catalog, IMEI checks, firmware inspection —
@@ -33,6 +33,18 @@ import java.io.FileOutputStream
  * Deep links openunlock://frp|imei|firmware|profiles|info do the same
  * from Tasker, Termux, or `am start`. No tags are programmed: there is
  * nothing to write, nothing to stick on a phone.
+ *
+ * Tasker + Shizuku (v0.2.2): new deep links for the Tasker project —
+ * openunlock://wireless-adb (run the wireless-ADB flow),
+ * openunlock://adb-devices (print `adb devices` via Shizuku),
+ * openunlock://shizuku-status (print the Shizuku state),
+ * openunlock://pair?code=XXXXXX (pair with the code from the client's
+ * screen; no code prints instructions), openunlock://nfc-reader (arm
+ * the NFC reader). Each deep link maps to the same Shizuku-powered
+ * action as its on-screen button — see docs/TASKER.md (tasker/README.md)
+ * for the full map. Tasker also drives Shizuku directly two ways: its
+ * own Run Shell actions with "Use Shizuku" ticked, and rish via the
+ * Termux RUN_COMMAND intent.
  *
  * The Python core is NOT embedded in this build: the Gradle daemon
  * protocol is broken in the build sandbox (proven on an empty project),
@@ -103,7 +115,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         inputImei = findViewById(R.id.input_imei)
         inputFrpMethod = findViewById(R.id.input_frp_method)
 
-        output.text = "OpenUnlock 0.2.1 (native Android build)\n"
+        output.text = "OpenUnlock 0.2.2 (native Android build)\n"
 
         Shizuku.addRequestPermissionResultListener(permissionListener)
         updateShizukuStatus()
@@ -309,15 +321,22 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         }
     }
 
-    /** Deep link that opened (or re-opened) the app: openunlock://<action>. */
+    /** Deep link that opened (or re-opened) the app: openunlock://<action>.
+     *  A `?code=` query param is passed through for the pair link. */
     private fun handleIntent(intent: Intent) {
         val uri = intent.data ?: return
         if (uri.scheme != "openunlock") return
         val action = uri.host ?: return
-        runDeepLinkAction(action)
+        runDeepLinkAction(action, uri.getQueryParameter("code"))
     }
 
-    private fun runDeepLinkAction(action: String) {
+    /**
+     * Deep-link dispatch. Every link maps to the same action as its
+     * on-screen button, with the same Shizuku requirement — see
+     * docs/TASKER.md for the full map. Links are additive: the original
+     * five (frp, imei, firmware, profiles, info) are unchanged.
+     */
+    private fun runDeepLinkAction(action: String, code: String? = null) {
         when (action) {
             "frp" -> runWork("FRP status (deep link)") { frpStatus() }
             "imei" -> runWork("IMEI read (deep link)") { imeiRead() }
@@ -329,8 +348,63 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             }
             "profiles" -> runWork("Profiles (deep link)") { Profiles.listProfiles(this) }
             "info" -> runWork("Device info + profile (deep link)") { localDeviceInfoWithProfile() }
+            "wireless-adb" -> runWork("Wireless ADB (deep link)") { wirelessAdbFlow() }
+            "adb-devices" -> runWork("adb devices (deep link)") { adbDevicesReport() }
+            "shizuku-status" -> runWork("Shizuku status (deep link)") { shizukuStatusReport() }
+            "pair" -> runWork("Pair + connect (deep link)") {
+                if (code.isNullOrEmpty()) {
+                    "No pairing code in the link. On the CLIENT: Wireless " +
+                    "debugging → 'Pair device with pairing code' — read the " +
+                    "6-digit code off its screen, type it into the 'Pairing " +
+                    "code' box in this app, and tap 'Pair + connect'. Or open " +
+                    "openunlock://pair?code=123456 from Tasker."
+                } else pairAndConnect(code)
+            }
+            "nfc-reader" -> runOnUiThread {
+                when {
+                    nfcAdapter == null ->
+                        appendOutput("\nThis phone has no NFC hardware.\n")
+                    !nfcAdapter!!.isEnabled ->
+                        appendOutput("\nNFC is off — turn it on in Settings first.\n")
+                    else -> {
+                        nfcReaderOn = true
+                        startNfcReaderMode()
+                        updateNfcStatus()
+                        appendOutput("\nNFC reader ARMED via deep link — " +
+                            "tap a client phone to this phone.\n")
+                    }
+                }
+            }
             else -> appendOutput("\nUnknown openunlock:// action: $action\n")
         }
+    }
+
+    /** One-line Shizuku state report, for the Tasker status-check task. */
+    private fun shizukuStatusReport(): String = when {
+        !ShizukuShell.isRunning() ->
+            "Shizuku: NOT RUNNING. Open the Shizuku app and tap " +
+            "'Start via Wireless Debugging' (pair first if it asks). " +
+            "Live features unavailable; offline features still work."
+        !ShizukuShell.hasPermission() ->
+            "Shizuku: RUNNING, permission NOT GRANTED for OpenUnlock. " +
+            "Tap 'Request Shizuku permission' in the app and allow it " +
+            "in the Shizuku app."
+        else ->
+            "Shizuku: READY — running and permission granted. " +
+            "Live shell features available."
+    }
+
+    /** `adb devices` via the Termux adb binary, run through Shizuku. */
+    private fun adbDevicesReport(): String {
+        requireShizuku()?.let { return it }
+        val adb = findAdbBinary()
+            ?: return "No adb binary on this phone — in Termux: " +
+                "`pkg install android-tools`."
+        val out = ShizukuShell.runQuiet(adbShell(adb, "devices"))
+        val connected = connectedClient?.let { "Connected client: $it" }
+            ?: "No client connected yet — tap 'Enable wireless ADB' " +
+                "or open openunlock://wireless-adb."
+        return "adb devices:\n${out.ifEmpty { "(no output)" }}\n$connected"
     }
 
     // -- wireless ADB: auto-enable after the tap ------------------------

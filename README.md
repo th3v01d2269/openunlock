@@ -97,12 +97,12 @@ wireless debugging or USB OTG.
 
 A native Kotlin app version is in `android/` — see
 [docs/ANDROID.md](docs/ANDROID.md). Debug APK: `android/app-debug.apk`
-(`com.openunlock`, v0.2.1, minSdk 26). Live features need the Shizuku
+(`com.openunlock`, v0.2.2, minSdk 26). Live features need the Shizuku
 app; offline features (profiles, FRP catalog, IMEI checks, firmware
 inspect) work without it. The APK is a port of the Python logic, not an
 embedded Python runtime — Gradle cannot build in this sandbox, so it is
 built with kotlinc + aapt2 + d8 directly (`android/manual/build-manual.sh`).
-v0.2.1 adds NFC tap-to-run (the client phone is the tag — see
+v0.2.2 adds Tasker + Shizuku integration (new deep links, rish tasks, setup check — see docs/NFC.md and tasker/README.md) on top of the v0.2.1 NFC tap-to-run (the client phone is the tag — see
 [docs/NFC.md](docs/NFC.md)) on top of the original features; nothing
 original was removed. Not yet run on a real phone.
 

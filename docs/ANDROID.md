@@ -1,7 +1,7 @@
 # OpenUnlock for Android
 
-A real Android app version of OpenUnlock (v0.2.1), built Nov 24, 2026.
-**APK: `android/app-debug.apk`** (664 KB, debug-signed, `com.openunlock`).
+A real Android app version of OpenUnlock (v0.2.2), built Nov 24, 2026.
+**APK: `android/app-debug.apk`** (669 KB, debug-signed, `com.openunlock`).
 
 > **Not tested on a real phone.** There is no Android device in the build
 > environment, so the APK is verified structurally only (aapt badging,
@@ -44,6 +44,16 @@ profiles|info` work from Tasker, Termux, or `am start`. A Tasker
 fallback project is in `tasker/OpenUnlock-NFC.prj.xml`. NFC is one
 extra section at the bottom of the same screen — every feature in the
 table above works exactly as before with no NFC interaction at all.
+
+**v0.2.2 — Tasker + Shizuku, also additive.** Five new deep links
+(`wireless-adb`, `adb-devices`, `shizuku-status`, `pair?code=…`,
+`nfc-reader`) so Tasker can drive every Shizuku action in the app,
+a Shizuku status-check task that notifies OK/FAIL, rish tasks that
+run `rish -c '…'` through Termux (Shizuku status, `adb devices`,
+the wireless-ADB flow, and a setup check that reports exactly what
+is missing), and a new NFC profile for wireless ADB. Full write-up:
+[`tasker/README.md`](../tasker/README.md). Nothing original changed
+— the 18-point feature check passes.
 
 ## Install
 
@@ -115,7 +125,7 @@ reason above.
 ## Verification done here
 
 * `aapt dump badging`: package `com.openunlock`, versionCode 3,
-  versionName 0.2.1, minSdk 26, targetSdk 34, permissions
+  versionName 0.2.2, minSdk 26, targetSdk 34, permissions
   `moe.shizuku.manager.permission.API_V23` + `android.permission.NFC`,
   launchable `com.openunlock.MainActivity`, intent filters for
   `openunlock://` (VIEW + NDEF_DISCOVERED), singleTop.
